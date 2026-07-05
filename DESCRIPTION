@@ -15,3 +15,5 @@ NeedsCompilation: no
 Packaged: 2026-07-03 21:58:27 UTC
 Author: Noelle Kosarek [aut], Olivia Daigle [aut, cre],
 Maintainer: Olivia Daigle <Olivia.Daigle@dartmouth.edu>
+URL: https://github.com/zebragirl314/CovDecayAnalyzer
+BugReports: https://github.com/zebragirl314/CovDecayAnalyzer/issues
