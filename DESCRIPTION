@@ -1,11 +1,17 @@
 Package: CovDecayAnalyzer
-Title: What the Package Does (One Line, Title Case)
+Title: OriLyt Coverage Decay Analyzer
 Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Authors@R: c(
+    person("Olivia", "Daigle", , "Olivia.Daigle@dartmouth.edu", role = c("aut", "cre")),
+    person("Noelle", "Kosarek", , "n.kosarek41@gmail.com", role = c("aut")))
+Description: Shiny app to explore sequence coverage decay starting from the lytic origin (oriLyt).
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
+Imports: ggplot2, rcompanion, shiny, bslib, data.table
+Suggests: stats
+NeedsCompilation: no
+Packaged: 2026-07-03 21:58:27 UTC
+Author: Noelle Kosarek [aut], Olivia Daigle [aut, cre],
+Maintainer: Olivia Daigle <Olivia.Daigle@dartmouth.edu>
