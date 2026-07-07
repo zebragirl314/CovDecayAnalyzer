@@ -9,7 +9,7 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
-Imports: ggplot2, rcompanion, shiny, bslib, data.table
+Imports: ggplot2, rcompanion, shiny, bslib, data.table, broom
 Suggests: stats
 NeedsCompilation: no
 Packaged: 2026-07-03 21:58:27 UTC

@@ -335,7 +335,7 @@ covApp <- function(directory = "/input", metadata = NULL){
           })
         }
 
-        combined <- rbindlist(result_list)
+        combined <- data.table::rbindlist(result_list)
         combined  <- merge(combined, si, by = "sample")
 
         # Log-transform
@@ -392,7 +392,7 @@ covApp <- function(directory = "/input", metadata = NULL){
 
       dat$group <- factor(dat$group, levels = sort(unique(dat$group)))
 
-      p <- ggplot(dat, aes(x = dist_from_ori, y = norm_cov, color = group))
+      p <- ggplot2::ggplot(dat, aes(x = dist_from_ori, y = norm_cov, color = group))
 
       if (input$show_points) {
         p <- p + geom_point(alpha = 0.15, size = 0.5)
@@ -566,5 +566,5 @@ covApp <- function(directory = "/input", metadata = NULL){
   }
 
   ##---------- RUN ----------
-  shinyApp(ui, server)
+  shiny::shinyApp(ui, server)
 }
