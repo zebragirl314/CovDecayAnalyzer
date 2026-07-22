@@ -158,8 +158,10 @@ sig                          # observed F, empirical p
 plot_null_distribution(sig)
 ```
 
-For a full walkthrough with synthetic data, see
-`vignette("intro", package = "CovDecayAnalyzer")` (planned).
+For a full walkthrough with the shipped simulated data, see
+`vignette("intro", package = "CovDecayAnalyzer")`. For the statistical
+methods behind `test_decay_slopes()` and `test_decay_significance()`,
+see `vignette("null-distribution", package = "CovDecayAnalyzer")`.
 
 ## Method summary
 

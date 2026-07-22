@@ -1,0 +1,391 @@
+---
+title: "Introduction to CovDecayAnalyzer"
+author:
+  - name: Carly Bobak
+    affiliation: Dartmouth College
+package: CovDecayAnalyzer
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{Introduction to CovDecayAnalyzer}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment  = "#>",
+    fig.width  = 7,
+    fig.height = 4.5,
+    fig.align  = "center"
+)
+```
+
+# Motivation
+
+When a mixed viral or bacterial population is sequenced while it is
+actively replicating, read coverage across the reference genome is
+usually not uniform. Regions near an active origin of replication
+accumulate additional copies during ongoing replication and therefore
+higher coverage. Regions far from an origin, or beyond termination
+sites, are relatively underrepresented. The *rate* at which coverage
+falls off with distance from an origin, or from any other reference
+coordinate of interest, can carry biological information about
+replication dynamics, and the *difference* in that rate between
+experimental conditions can reveal treatment-induced changes.
+
+`CovDecayAnalyzer` provides a small, focused set of tools for this
+class of analysis. Given per-base coverage across a linear reference
+genome, the package:
+
+1. Bins and median-normalizes coverage per sample.
+2. Fits log-linear decay slopes with distance from a user-supplied
+   anchor position (origin of replication, genome end, feature
+   boundary, or any other coordinate).
+3. Compares decay slopes across treatment groups with a linear
+   mixed-effects model, tested with a Kenward-Roger small-sample F
+   statistic.
+4. Assesses whether an observed group difference is specific to the
+   anchor of interest by comparing it to a null distribution of
+   F-statistics built from random genomic anchor positions.
+
+# When this package is likely to help
+
+Concrete examples of the kind of question the package is built for:
+
+- **Comparative replication dynamics.** How does coverage decay around
+  a known or putative origin differ between drug-treated and untreated
+  viruses, wild-type and knockout strains, or immortalized vs.
+  primary host cells?
+- **Origin discovery, in the coarse sense.** Which of several
+  candidate anchor positions produces the strongest between-group
+  coverage-decay signal?
+- **Genome-end vs. interior effects.** Herpesviruses, phages, and
+  linear plasmids sometimes show distinctive coverage patterns near
+  their ends. The package's anchor is user-supplied, so genome start
+  and end are natural choices as well as OriLyt.
+- **General coverage-anomaly comparisons.** Any experiment where the
+  question is "does the spatial pattern of coverage around a specific
+  reference coordinate differ between two or more experimental
+  conditions?"
+
+The package was developed for Human Cytomegalovirus (HCMV) TB40/E work
+around the lytic origin of replication (OriLyt), but nothing in the
+methods is HCMV-specific. Any linear reference genome with a defined
+anchor coordinate is a candidate.
+
+# When to use something else
+
+This is a small package doing a specific job. It is not the right
+tool if:
+
+- Your question is about coverage *at* a set of features (peaks,
+  binding sites, gene bodies) rather than coverage *decay* from an
+  anchor. Look at
+  `r BiocStyle::Biocpkg("csaw")`,
+  `r BiocStyle::Biocpkg("DESeq2")` on binned counts, or
+  `r BiocStyle::Biocpkg("edgeR")` on windows.
+- You need per-base statistical modeling. This package works on
+  binned coverage.
+- Your genome is circular and you need distances to wrap around.
+  Distances here are computed as absolute linear distance from the
+  anchor. Circular topology is not currently supported.
+- You have only one sample per group. The formal test requires random
+  slopes per sample, and its small-sample correction is designed for
+  the n = 2 to 5 per group regime.
+
+# Installation and setup
+
+The package is not yet on Bioconductor. From GitHub:
+
+```r
+# install.packages("remotes")
+remotes::install_github("BoscoResearchGroup/CovDecayAnalyzer")
+```
+
+```{r load-package, message = FALSE}
+library(CovDecayAnalyzer)
+```
+
+# Input data format
+
+The package reads tab-delimited per-base coverage files with the
+following columns:
+
+| Column               | Type    | Description                              |
+|:---------------------|:--------|:-----------------------------------------|
+| `position`           | integer | 1-based reference coordinate             |
+| `unique_top_cov`     | numeric | Uniquely-mapped reads on the top strand  |
+| `unique_bot_cov`     | numeric | Uniquely-mapped reads on the bottom strand |
+| `redundant_top_cov`  | numeric | Multi-mapped reads on the top strand     |
+| `redundant_bot_cov`  | numeric | Multi-mapped reads on the bottom strand  |
+
+This is exactly the schema produced by breseq's mutation
+identification stage as `Exported.coverage.tab`. Additional columns
+present in some breseq versions (`raw_redundant_top_cov`,
+`raw_redundant_bot_cov`, `e_value`) are accepted and ignored.
+
+Total coverage is computed as the sum of the four uniqueness- and
+strand-specific columns. If you have coverage from another tool, save
+it in this schema before reading and the rest of the pipeline works
+unchanged.
+
+# The shipped example data
+
+Four simulated samples are included in `inst/extdata/` for
+demonstration and testing. They are entirely synthetic; nothing here
+is derived from real data.
+
+The simulated genome is 2000 bp long with an anchor at position 1000.
+Samples fall into two groups:
+
+- **WT-GCV** (samples `A1`, `A2`): coverage decays gently from the
+  anchor at rate $5 \times 10^{-4}$ per bp
+- **WT+GCV** (samples `B1`, `B2`): coverage decays six times faster
+  at rate $3 \times 10^{-3}$ per bp
+
+Both groups peak at coverage ~500 near the anchor, so they differ
+*only* in decay rate. This is the exact interaction the package is
+designed to detect. Running the pipeline on this data should give a
+clear, unambiguous signal in every plot and every test.
+
+```{r load-metadata}
+extdata_dir <- system.file("extdata", package = "CovDecayAnalyzer")
+
+meta <- read.csv(
+    file.path(extdata_dir, "sample_metadata.csv"),
+    stringsAsFactors = FALSE
+)
+meta
+```
+
+# Pointing the loader at coverage files
+
+`load_all_samples()` reads its file paths from a `coverage_file`
+column in the sample metadata table. This is a deliberate design
+choice: the package does not assume any particular on-disk layout,
+which makes it work across output conventions from different tools.
+
+For users with breseq output in the standard layout, the helper
+`breseq_coverage_paths()` builds the `coverage_file` column in one
+line:
+
+```{r build-paths-breseq}
+meta$coverage_file <- breseq_coverage_paths(
+    sample_names = meta$sample,
+    base_dir     = extdata_dir
+)
+```
+
+For any other tool or layout, populate `coverage_file` directly:
+
+```{r build-paths-generic, eval = FALSE}
+meta$coverage_file <- c(
+    "/data/experiment1/sampleA_coverage.tab",
+    "/data/experiment1/sampleB_coverage.tab",
+    "/data/experiment2/sampleC_coverage.tab",
+    "/data/experiment2/sampleD_coverage.tab"
+)
+```
+
+# Loading and normalizing coverage
+
+```{r load-samples}
+combined <- load_all_samples(
+    sample_metadata = meta,
+    bin_size        = 100,      # small bins for the 2 kb toy genome
+    genome_length   = 2000
+)
+combined
+```
+
+Each row is one bin from one sample. Coverage has been aggregated to
+100 bp windows and median-normalized within each sample; the
+`log_norm_cov` column is the log-transformed normalized coverage used
+by downstream modeling.
+
+Bin size is a user choice. Smaller bins retain more spatial detail
+but produce noisier per-bin means and larger working tables. Larger
+bins are smoother but may average across distinct local features. For
+a full HCMV genome (~238 kb), 1000 bp bins are typical; for the small
+example genome here, 100 bp bins give enough resolution to see the
+decay.
+
+# Visualizing decay
+
+`plot_coverage_decay()` shows per-sample normalized coverage against
+distance from the anchor, with a loess-smoothed trend line per group.
+
+```{r plot-coverage-decay}
+plot_coverage_decay(
+    combined,
+    anchor_position = 1000,
+    window          = 1000
+)
+```
+
+The two group curves separate cleanly, matching what was built into
+the simulated data. On real data, the loess smoother is useful for
+spotting local departures from log-linearity that would violate the
+assumptions of the formal test in Section \@ref(formal-group-comparison).
+
+# Per-sample decay slopes as a diagnostic
+
+`fit_decay_slopes()` fits a simple linear regression per sample of
+`log_norm_cov ~ distance_from_anchor` and returns per-sample slope
+estimates:
+
+```{r fit-slopes}
+slopes <- fit_decay_slopes(combined, anchor_position = 1000)
+slopes
+```
+
+WT+GCV samples show slopes several times more negative than WT-GCV.
+
+```{r plot-slopes}
+plot_decay_slopes(slopes)
+```
+
+This view is a diagnostic, not a formal test. Per-sample slopes throw
+away information about how *precisely* each slope is estimated, which
+is what the formal LMM in the next section preserves. Look at this
+plot to spot outlier samples and to confirm the direction and rough
+magnitude of the effect; use the LMM for inference.
+
+# Formal group comparison
+
+`test_decay_slopes()` fits a linear mixed-effects model to all bins
+across all samples simultaneously, and tests whether the rate of
+decay differs between groups. The full model, the small-sample
+correction, and interpretation guidance are in the companion
+vignette; see
+`vignette("null-distribution", package = "CovDecayAnalyzer")`.
+
+```{r test-slopes}
+res <- test_decay_slopes(combined, anchor_position = 1000)
+res
+```
+
+The returned `decay_test` object has:
+
+- `res$F_stat`, `res$df1`, `res$df2`, `res$p_value`: the
+  Kenward-Roger F test for the interaction.
+- `res$group_slopes`: per-group slope estimates with 95% confidence
+  intervals.
+- `res$pairwise`: Tukey-adjusted pairwise group contrasts on slopes.
+- `res$model`: the fitted `lmerModLmerTest` object for further
+  diagnostics.
+
+```{r pairwise}
+res$pairwise
+```
+
+# Anchor-specificity via random-anchor null
+
+A significant group difference at one anchor could arise anywhere in
+the genome by chance. `test_decay_significance()` refits the LMM at
+`n_random` random anchor positions to build a null distribution of
+interaction F-statistics, and reports how surprising the observed F
+is relative to that null.
+
+For a real analysis, use `n_random = 500` or more and pass a
+`BiocParallel` param object to parallelize. Here we use a smaller
+value to keep the vignette build quick:
+
+```{r test-significance, message = FALSE, warning = FALSE}
+sig <- test_decay_significance(
+    combined,
+    anchor_position = 1000,
+    genome_length   = 2000,
+    n_random        = 50,
+    seed            = 2026
+)
+sig
+```
+
+The empirical p-value hits the floor of $1 / (n_{\text{random}} + 1)$,
+indicating the observed F exceeds every F obtained at a random
+genomic position. On real data, the interpretation depends on both
+the LMM p-value at the anchor and the empirical p-value; see the
+methods vignette for a table of the four meaningful combinations.
+
+```{r plot-null}
+plot_null_distribution(sig)
+```
+
+# Viral reads-per-million summary
+
+Independent of the decay analysis, viral RPM (reads per million host
+reads) is a commonly-reported summary of viral yield across samples.
+`compute_viral_rpm()` computes RPM vectorised over samples given
+viral read counts and host read counts, and `plot_rpm_by_group()`
+draws a simple by-group barplot with error bars.
+
+Because the shipped example data does not include host read counts,
+we illustrate with a small synthetic tibble:
+
+```{r rpm-example}
+set.seed(1)
+rpm_df <- data.frame(
+    sample    = paste0("s", 1:12),
+    group     = rep(c("WT-GCV", "WT+GCV", "FV-GCV", "FV+GCV"), each = 3),
+    viral_rpm = c(
+        rnorm(3, 3000, 500),
+        rnorm(3, 1500, 300),
+        rnorm(3, 2500, 400),
+        rnorm(3, 1200, 250)
+    )
+)
+
+plot_rpm_by_group(rpm_df)
+```
+
+In a typical breseq-based workflow, viral read counts come from the
+`total_reads` field of `output/summary.json`, and host read counts
+come from the concordant-pair line in bowtie2's alignment log.
+Extracting these is a small shell script and is not part of the R
+package.
+
+# Adapting to your own data
+
+Nothing in the workflow is specific to HCMV or breseq. To use the
+package with other data:
+
+- **Different genome.** Set `genome_length` appropriately and choose
+  an `anchor_position` that makes biological sense for your reference.
+- **Different sequencing tool.** Ensure your per-base coverage file
+  has the five required columns (`position`, `unique_top_cov`,
+  `unique_bot_cov`, `redundant_top_cov`, `redundant_bot_cov`). If your
+  tool produces coverage in a different schema, a small preprocessing
+  script that renames columns and writes tab-delimited output is
+  usually sufficient. Then either point `load_all_samples()` at these
+  files directly via the `coverage_file` column, or write a
+  layout-specific helper analogous to `breseq_coverage_paths()`.
+- **Bin size and window.** Larger genomes benefit from larger bins.
+  For a 5 Mb bacterial genome, 5-10 kb bins are reasonable. The
+  `window` argument to `test_decay_slopes()` restricts the fit to a
+  local region around the anchor; use it when you have a specific
+  distance range in mind (say, "the first 50 kb"), and leave it
+  `NULL` for a whole-genome fit.
+- **Number of groups.** The LMM handles any number of groups, not
+  just two. Pairwise contrasts from `emmeans` scale accordingly.
+
+# Where to go next
+
+- `vignette("null-distribution", package = "CovDecayAnalyzer")` for
+  the statistical methods behind `test_decay_slopes()` and
+  `test_decay_significance()`.
+- `help(package = "CovDecayAnalyzer")` for the full function
+  reference. Every exported function has a runnable example.
+- The package source on GitHub for bug reports and feature requests.
+
+# Session info
+
+```{r session-info}
+sessionInfo()
+```

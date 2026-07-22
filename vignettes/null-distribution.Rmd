@@ -1,0 +1,450 @@
+---
+title: "Statistical methods: group decay tests and anchor-specificity"
+author:
+  - name: Carly Bobak
+    affiliation: Dartmouth College
+package: CovDecayAnalyzer
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{Statistical methods: group decay tests and anchor-specificity}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment  = "#>",
+    fig.width  = 7,
+    fig.height = 4.5,
+    fig.align  = "center"
+)
+```
+
+# What this vignette is for
+
+`CovDecayAnalyzer` has two testing functions,
+`test_decay_slopes()` and `test_decay_significance()`. Between them
+they answer two related but distinct questions about coverage decay
+around a genomic anchor. This vignette is a companion to
+`vignette("intro", package = "CovDecayAnalyzer")` that documents the
+underlying statistical procedures.
+
+It is written to serve three audiences:
+
+- Users who want to understand what the tests are actually doing
+  before running them on real data.
+- Reviewers of downstream manuscripts who need enough detail to
+  evaluate the appropriateness of the methods.
+- Students or curious readers who want a worked example of applying
+  linear mixed-effects models plus Monte Carlo permutation testing to
+  a spatial-genomics problem.
+
+The exposition tries to remain honest about what is done and what is
+not, including limitations and reasonable alternatives.
+
+# The two questions
+
+Suppose you have several samples in each of two or more treatment
+groups, and per-base sequencing coverage on a shared reference
+genome. You have a genomic anchor position in mind (an origin of
+replication, a feature boundary, a genome end). The two questions
+this package answers:
+
+- **Question A: Do groups differ in coverage-decay rate at this
+  anchor?** Answered by `test_decay_slopes()`, which fits a linear
+  mixed-effects model with a distance-by-group interaction and tests
+  the interaction with a Kenward-Roger F statistic.
+- **Question B: Is any group difference we see at this anchor
+  specific to the anchor, or would we see something comparable at
+  other positions in the genome?** Answered by
+  `test_decay_significance()`, which repeats the LMM at many random
+  anchor positions to build a null distribution of interaction
+  F-statistics and reports an empirical p-value.
+
+Both questions matter. A positive answer to A alone tells us the
+groups differ *somewhere* along the coverage-vs-distance curve near
+this anchor. A positive answer to B is what lets us claim that
+whatever effect exists is meaningfully localized to the anchor. See
+Section \@ref(interpretation-the-two-p-values-together) for a
+walk-through of the four combinations of A and B outcomes.
+
+# The linear mixed-effects test
+
+## Why not a two-stage approach?
+
+The most naive way to test for a group difference in decay is a
+two-stage procedure: fit a slope per sample, then compare slopes
+across groups with a t-test, ANOVA, or Kruskal-Wallis test. This is
+easy to explain but has real weaknesses:
+
+- **It discards precision information.** A slope estimated cleanly
+  from a well-covered sample counts the same as a slope estimated
+  noisily from a sparse sample.
+- **It has low power at typical experimental sizes.** With n = 2 to
+  5 samples per group, parametric tests on n slopes have very little
+  power, and permutation tests span only a coarse p-value grid.
+
+Fitting a single linear mixed-effects model to the full per-bin data
+avoids both issues. It uses every observation, propagates
+within-sample uncertainty into the group comparison, and admits a
+principled small-sample correction.
+
+## Model specification
+
+For sample $i$, bin $j$, group $g$, define $y_{ij}$ as the normalized
+log-scale coverage `log_norm_cov` at bin $j$ of sample $i$, and
+$d_{ij}$ as the absolute distance from the anchor position, in base
+pairs. The model fit by `test_decay_slopes()` is
+
+$$
+y_{ij} =
+    (\beta_0 + b_{0i}) +
+    (\beta_1 + b_{1i}) \, d_{ij} +
+    \sum_{g=2}^{G} \gamma_g \, \mathbf{1}(\text{group}_i = g) +
+    \sum_{g=2}^{G} \delta_g \, d_{ij} \, \mathbf{1}(\text{group}_i = g) +
+    \varepsilon_{ij}
+$$
+
+with
+
+- fixed intercept $\beta_0$ and fixed slope $\beta_1$ for the
+  reference group,
+- fixed group offsets $\gamma_g$ and group-by-distance interaction
+  terms $\delta_g$,
+- per-sample random intercepts $b_{0i}$ and random slopes $b_{1i}$
+  drawn jointly from an unstructured bivariate normal,
+- residuals $\varepsilon_{ij} \sim \mathcal{N}(0, \sigma^2)$
+  assumed independent.
+
+In `lme4` notation this is
+
+```
+log_norm_cov ~ distance_from_anchor * group +
+               (1 + distance_from_anchor | sample)
+```
+
+## The hypothesis being tested
+
+"Groups differ in decay rate" corresponds formally to the joint
+hypothesis
+
+$$
+H_0 : \delta_2 = \delta_3 = \dots = \delta_G = 0
+$$
+
+that is, all interaction terms are zero, versus the general
+alternative that at least one is nonzero. This is a Type III F test
+on the `distance_from_anchor:group` interaction row of the ANOVA
+table.
+
+## Small-sample correction
+
+With n = 2 to 5 samples per group, the asymptotic assumptions
+underlying naive Wald or Satterthwaite tests are unreliable. The
+Kenward-Roger approximation (Kenward and Roger, 1997) adjusts both
+the fixed-effect covariance estimate and the denominator degrees of
+freedom of the F statistic. It is designed for exactly this
+small-sample regime and is the standard recommendation in the mixed
+model literature for experiments with few units per group.
+
+`test_decay_slopes()` invokes `lmerTest::lmer` (Kuznetsova, Brockhoff
+and Christensen, 2017) on top of `lme4::lmer` (Bates, Machler, Bolker
+and Walker, 2015), then extracts the Kenward-Roger F, denominator
+degrees of freedom, and p-value from `anova(model, ddf = "Kenward-Roger")`.
+
+## Post-hoc pairwise contrasts
+
+When the joint interaction test is significant, `emmeans::emtrends()`
+(Lenth, 2024) computes per-group slope estimates on the natural
+scale, and `pairs()` returns Tukey-adjusted pairwise slope contrasts.
+These appear in the `group_slopes` and `pairwise` fields of the
+returned object.
+
+## Assumptions
+
+The model above assumes:
+
+- **Log-linearity of decay.** Real coverage decay from an origin of
+  replication is not always a clean exponential. Assembly artifacts,
+  fork termination sites, and cell-cycle asynchrony can produce
+  non-log-linear patterns. The loess overlay in
+  `plot_coverage_decay()` is a useful visual check: strong
+  systematic departures from monotonic decay indicate the log-linear
+  assumption is under strain.
+- **Sample independence given group.** Samples within a group are
+  assumed to be independent replicates. Repeated measures or
+  clustered sample designs would need additional random-effect
+  structure.
+- **Symmetric decay around the anchor.** Distance is computed as
+  absolute distance. If you have reason to expect asymmetric decay
+  (e.g. directional replication with an obligate leading and lagging
+  strand at your chosen anchor), consider fitting the two arms
+  separately.
+- **Approximate normality of the residuals.** Coverage is a count
+  process, so a Gaussian assumption on `log(norm_cov + epsilon)` is
+  an approximation. It is a reasonable one at moderate to high
+  coverage. Very low-coverage regions may be better handled by a
+  generalized linear mixed model, which is not currently implemented.
+
+## Numerical scaling
+
+Raw distances in base pairs can be very large (tens or hundreds of
+kilobases for viral genomes) while per-bp slopes are correspondingly
+tiny ($10^{-5}$ to $10^{-3}$). The resulting design matrix condition
+number is well beyond double precision, and the Kenward-Roger variance
+adjustment fails on such inputs with `system is computationally
+singular`.
+
+`test_decay_slopes()` handles this by internally rescaling distance
+so its maximum lands in the 1-to-10 range before fitting the LMM.
+Slope estimates, standard errors, and confidence intervals in the
+returned `group_slopes` and `pairwise` tables are converted back to
+per-bp units on the way out. F, degrees of freedom, and p-value are
+invariant to this rescaling, so nothing about the test itself is
+affected. The scaling factor used is recorded in the
+`distance_scale` field of the returned object.
+
+## Worked example
+
+We use the shipped simulated data. The two groups differ in decay
+rate by a factor of six.
+
+```{r load-data, message = FALSE}
+library(CovDecayAnalyzer)
+
+extdata_dir <- system.file("extdata", package = "CovDecayAnalyzer")
+meta <- read.csv(
+    file.path(extdata_dir, "sample_metadata.csv"),
+    stringsAsFactors = FALSE
+)
+meta$coverage_file <- breseq_coverage_paths(meta$sample, extdata_dir)
+
+combined <- load_all_samples(
+    sample_metadata = meta,
+    bin_size        = 100,
+    genome_length   = 2000
+)
+```
+
+```{r run-lmm}
+res <- test_decay_slopes(combined, anchor_position = 1000)
+res
+```
+
+The interaction is highly significant. The per-group slopes are
+close to the simulated values, roughly $-5 \times 10^{-4}$ for WT-GCV
+and $-3 \times 10^{-3}$ for WT+GCV.
+
+```{r pairwise-contrast}
+res$pairwise
+```
+
+Basic residual diagnostics:
+
+```{r diagnostics-plot, fig.height = 4}
+resid_df <- data.frame(
+    fitted    = fitted(res$model),
+    residual  = resid(res$model)
+)
+plot(
+    resid_df$fitted, resid_df$residual,
+    xlab = "Fitted value", ylab = "Residual",
+    main = "Residuals vs fitted",
+    pch  = 20, col = "grey40"
+)
+abline(h = 0, col = "red", lty = 2)
+```
+
+Residuals should be roughly homoscedastic and centered on zero. Fan
+shapes or systematic curvature suggest misspecification.
+
+# The random-anchor null distribution
+
+## Why permute anchor positions rather than sample labels?
+
+There are two natural things to permute in this setting:
+
+1. **Sample labels** (swap which sample is in which group). Under the
+   null of "no group effect", this preserves the marginal
+   distribution of coverage at every position. The LMM p-value is
+   effectively a parametric proxy for this permutation. This is a
+   test of "does treatment matter?".
+2. **Anchor positions** (keep the samples and labels fixed, but ask
+   the same question at other genomic coordinates). Under the null
+   of "the anchor is nothing special", we would expect similar
+   between-group differences to appear at random positions. This is
+   a test of "is the effect specific to this anchor?".
+
+The two answer different questions and are both useful. The LMM
+p-value at the observed anchor covers (1). The empirical p-value
+from `test_decay_significance()` covers (2).
+
+Permuting anchor positions rather than sample labels is what makes
+sense biologically for the second question. If coverage anomalies
+that happen to correlate with treatment are common across the genome
+(mapping artifacts, GC content, expression differences that shadow
+treatment), a group effect at any single anchor is not automatically
+biologically meaningful. Comparing to random positions calibrates
+against this background.
+
+## Construction
+
+`null_distribution_F()` samples $N$ positions uniformly from
+$[1, \texttt{genome\_length}]$, and at each position refits the LMM
+above, extracting the Kenward-Roger F for the distance-by-group
+interaction. Fits that fail (rare, and typically near the genome
+ends where the window is degenerate) are dropped. The returned
+vector has length at most $N$.
+
+An optional `exclude` argument lets you specify a region around the
+observed anchor to remove from the random-position pool, to prevent
+overlap between the observed window and null windows.
+`test_decay_significance()` exposes this via `exclude_radius`.
+
+## Empirical p-value
+
+Given the observed F at the anchor of interest, $F_{\text{obs}}$, and
+a null distribution $\{F_1, F_2, \dots, F_n\}$, the empirical
+right-tailed p-value is
+
+$$
+p_{\text{emp}} = \frac{k + 1}{n + 1},
+\qquad
+k = \# \{ F_i : F_i \ge F_{\text{obs}} \}.
+$$
+
+The `+1` in both numerator and denominator is not smoothing. It is
+the correct exact expression for a Monte Carlo test where the null
+samples are drawn with replacement, as derived by Phipson and Smyth
+(2010). Using the more intuitive $k/n$ estimator systematically
+understates the true p-value by roughly $1/n$ and can produce
+impossible p-values of exactly zero. The corrected form has a
+minimum achievable value of $1/(n+1)$, which is the smallest p-value
+that a Monte Carlo test with $n$ samples can honestly report.
+
+## Interpretation: the two p-values together
+
+The LMM p-value at the observed anchor and the empirical p-value
+answer different questions, and their combinations are meaningful in
+different ways:
+
+|                                | Small empirical p                  | Large empirical p                                            |
+|:-------------------------------|:-----------------------------------|:-------------------------------------------------------------|
+| **Small LMM p (at anchor)**    | Real effect, and it is specific to this anchor. Best case for a biological claim. | Real effect, but not specific to this anchor. Suggests widespread coverage anomalies that happen to correlate with treatment; interpret with caution. |
+| **Large LMM p (at anchor)**    | Cannot occur by construction: if the observed F is unremarkable, it cannot be extreme relative to a null derived from data with the same structure. | No detectable group difference in decay at this anchor.      |
+
+The lower-left cell is precluded because the empirical p-value uses
+$F_{\text{obs}}$ as the reference; if that reference is not
+extreme, no null can make it look extreme.
+
+The upper-right cell is the most nuanced case. In practice, a small
+LMM p combined with a large empirical p suggests one of two
+possibilities:
+
+- The chosen anchor is not the "right" position, but similar anchors
+  nearby (or elsewhere) show comparable effects. A biological
+  narrative attached specifically to *this* anchor is weakened.
+- There is a real, widespread biological difference in
+  coverage-vs-distance structure between groups, not localized to any
+  particular position. Interesting, but a different claim.
+
+## Assumptions of the random-anchor null
+
+The random-anchor approach assumes:
+
+- **Positions in the genome are exchangeable for the purpose of the
+  null.** If your genome has structural features that make certain
+  positions systematically different (e.g. highly repetitive
+  regions, low-complexity tracts), the null may include positions
+  that are not biologically comparable to the anchor of interest.
+  Consider masking or restricting the sampled positions.
+- **The LMM is fit-able at random anchors.** In practice a small
+  fraction of random anchors near genome ends produce singular fits.
+  These are dropped and the effective $n$ is reported.
+- **The number of random anchors is large enough.** The minimum
+  achievable p-value is $1/(n_{\text{random}} + 1)$. For screens,
+  500 is a reasonable default; for publication-grade significance
+  claims, 1000 or more is safer.
+
+## Worked example
+
+Continuing from the LMM example above:
+
+```{r run-null, message = FALSE, warning = FALSE}
+sig <- test_decay_significance(
+    combined,
+    anchor_position = 1000,
+    genome_length   = 2000,
+    n_random        = 100,
+    seed            = 2026
+)
+sig
+```
+
+The empirical p-value is at the floor of $1 / (100 + 1) \approx 0.0099$,
+indicating the observed F at the anchor exceeds every F obtained at
+a random position. This is consistent with the simulated data, which
+was constructed with the group difference concentrated at the anchor.
+
+```{r plot-null}
+plot_null_distribution(sig)
+```
+
+The vertical line at the observed F sits well to the right of the
+entire null distribution.
+
+# Alternatives worth knowing about
+
+The methods above are one reasonable choice among several. Depending
+on your data and question, one of these might suit you better:
+
+- **Generalized additive models with random effects.** If
+  log-linearity is a poor fit and you want to model curvature
+  explicitly, `mgcv::gamm` with a smooth term in distance and a
+  random slope per sample is a natural extension. The output is
+  harder to interpret than an LMM slope but more flexible in shape.
+- **Nonlinear mixed models.** If you have a specific mechanistic
+  decay function in mind (say, exponential with a plateau), fit that
+  form directly with `nlme::nlme`.
+- **Genome-wide coverage differential analysis.** If your question
+  is really about differences at many positions across the genome
+  rather than at a single anchor, tools designed for windowed
+  differential coverage analysis
+  (`r BiocStyle::Biocpkg("csaw")`,
+  `r BiocStyle::Biocpkg("DESeq2")` on binned counts) are more
+  appropriate than repeated single-anchor tests.
+- **Simple two-stage tests when data is large.** When you have many
+  samples per group (say, n > 30), the small-sample corrections
+  matter less and a two-stage procedure with permutation-based
+  Wilcoxon contrasts may be adequate.
+
+# References
+
+- Bates D, Machler M, Bolker B, Walker S (2015). Fitting linear
+  mixed-effects models using lme4. *Journal of Statistical Software*
+  67(1):1-48. \doi{10.18637/jss.v067.i01}
+- Kenward MG, Roger JH (1997). Small sample inference for fixed
+  effects from restricted maximum likelihood. *Biometrics*
+  53(3):983-997. \doi{10.2307/2533558}
+- Kuznetsova A, Brockhoff PB, Christensen RHB (2017). lmerTest
+  package: Tests in linear mixed effects models. *Journal of
+  Statistical Software* 82(13):1-26. \doi{10.18637/jss.v082.i13}
+- Lenth RV (2024). emmeans: Estimated Marginal Means, aka
+  Least-Squares Means. R package.
+  <https://CRAN.R-project.org/package=emmeans>
+- Phipson B, Smyth GK (2010). Permutation p-values should never be
+  zero: calculating exact p-values when permutations are randomly
+  drawn. *Statistical Applications in Genetics and Molecular Biology*
+  9(1), Article 39. \doi{10.2202/1544-6115.1585}
+
+# Session info
+
+```{r session-info}
+sessionInfo()
+```

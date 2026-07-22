@@ -74,5 +74,14 @@ breseq output in the standard layout.
   designed with a strong group difference in decay rate so example
   runs produce clearly interpretable results.
 * `inst/extdata/sample_metadata.csv`: matching metadata table.
-* `data-raw/simulate_extdata.R`: R recipe for regenerating the
-  simulated dataset. Excluded from the built package.
+* `inst/scripts/simulate_extdata.R`: R recipe for regenerating the
+  simulated dataset.
+
+## Vignettes
+
+* `intro`: end-to-end walkthrough of the pipeline on the shipped
+  simulated data.
+* `null-distribution`: methods reference covering the linear
+  mixed-effects test and the random-anchor null distribution, with
+  the assumptions, small-sample correction, and interpretation of
+  observed-vs-null p-value combinations.
