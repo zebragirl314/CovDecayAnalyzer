@@ -31,7 +31,7 @@ Not yet on Bioconductor. From GitHub:
 
 ```r
 # install.packages("remotes")
-remotes::install_github("BoscoResearchGroup/CovDecayAnalyzer")
+remotes::install_github("zebragirl314/CovDecayAnalyzer")
 ```
 
 ## Input data
