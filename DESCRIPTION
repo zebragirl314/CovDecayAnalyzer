@@ -1,19 +1,48 @@
 Package: CovDecayAnalyzer
-Title: OriLyt Coverage Decay Analyzer
-Version: 0.0.0.9000
+Type: Package
+Title: Coverage Decay Analysis Around Viral Genome Anchor Positions
+Version: 0.1.0
 Authors@R: c(
-    person("Olivia", "Daigle", , "Olivia.Daigle@dartmouth.edu", role = c("aut", "cre")),
-    person("Noelle", "Kosarek", , "n.kosarek41@gmail.com", role = c("aut")))
-Description: Shiny app to explore sequence coverage decay starting from the lytic origin (oriLyt).
-License: MIT + file LICENSE
+    person("Olivia", "Daigle", role = "aut"),
+    person("Noelle", "Kosarek", role = "aut"),
+    person("Carly", "Bobak",
+           email = "Carly.A.Bobak@dartmouth.edu",
+           role = c("aut", "cre")))
+Description: Tools for quantifying sequencing coverage decay around anchor
+    positions in viral genomes, developed for Human Cytomegalovirus (HCMV)
+    analyses of coverage around the lytic origin of replication (OriLyt) and
+    at genome start and end positions. Given per-base coverage output from
+    breseq, the package bins and median-normalizes coverage per sample,
+    fits log-linear decay slopes with distance from a user-supplied anchor,
+    compares slopes across treatment groups by ANOVA, Kruskal-Wallis, or
+    pairwise permutation, and evaluates the significance of the observed
+    result against a null distribution built from random genomic anchor
+    positions. A viral reads-per-million (RPM) summary is also included.
+License: Artistic-2.0
 Encoding: UTF-8
+Depends:
+    R (>= 4.3.0)
+Imports:
+    data.table,
+    tibble,
+    ggplot2,
+    stats,
+    utils,
+    graphics,
+    lme4,
+    lmerTest,
+    emmeans,
+    BiocParallel
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    BiocStyle,
+    qvalue
+biocViews: Coverage, Sequencing, Visualization, StatisticalMethod, Software
+VignetteBuilder: knitr
+Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 8.0.0
-Imports: ggplot2, rcompanion, shiny, bslib, data.table, broom
-Suggests: stats
-NeedsCompilation: no
-Packaged: 2026-07-03 21:58:27 UTC
-Author: Noelle Kosarek [aut], Olivia Daigle [aut, cre],
-Maintainer: Olivia Daigle <Olivia.Daigle@dartmouth.edu>
-URL: https://github.com/zebragirl314/CovDecayAnalyzer
-BugReports: https://github.com/zebragirl314/CovDecayAnalyzer/issues
+RoxygenNote: 7.3.3
+URL: https://github.com/BoscoResearchGroup/CovDecayAnalyzer
+BugReports: https://github.com/BoscoResearchGroup/CovDecayAnalyzer/issues
