@@ -32,7 +32,8 @@ Imports:
     lme4,
     lmerTest,
     emmeans,
-    BiocParallel
+    BiocParallel,
+    Hmisc
 Suggests:
     testthat (>= 3.0.0),
     knitr,

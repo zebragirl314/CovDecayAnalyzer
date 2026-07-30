@@ -224,7 +224,7 @@ test_decay_slopes <- function(combined,
         is.finite(combined$distance_from_anchor), , drop = FALSE]
     combined$group <- factor(combined$group)
 
-    n_groups <- length(levels(combined$group))
+    n_groups <- length(unique(combined$group))
     if (n_groups < 2L) {
         stop("Need at least two groups to test group differences.")
     }
