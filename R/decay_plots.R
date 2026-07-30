@@ -78,8 +78,7 @@
 #' )
 #' plot_coverage_decay(combined, anchor_position = 1000, window = 1000)
 #'
-#' @importFrom ggplot2 ggplot aes geom_point geom_smooth coord_cartesian
-#'   scale_color_brewer labs theme_minimal theme element_text
+#' @importFrom ggplot2 ggplot aes geom_point geom_smooth coord_cartesian scale_color_brewer labs theme_minimal theme element_text
 #' @export
 plot_coverage_decay <- function(combined,
                                 anchor_position = NULL,
@@ -201,8 +200,7 @@ plot_coverage_decay <- function(combined,
 #' slopes <- fit_decay_slopes(fake, anchor_position = 0)
 #' plot_decay_slopes(slopes)
 #'
-#' @importFrom ggplot2 ggplot aes geom_boxplot geom_jitter
-#'   scale_fill_brewer labs theme_minimal theme element_text
+#' @importFrom ggplot2 ggplot aes geom_boxplot geom_jitter scale_fill_brewer labs theme_minimal theme element_text
 #' @export
 plot_decay_slopes <- function(slopes,
                             show_jitter = TRUE,
@@ -286,8 +284,7 @@ plot_decay_slopes <- function(slopes,
 #' )
 #' plot_null_distribution(fake_sig)
 #'
-#' @importFrom ggplot2 ggplot aes geom_histogram geom_vline labs
-#'   theme_minimal theme element_text
+#' @importFrom ggplot2 ggplot aes geom_histogram geom_vline labs theme_minimal theme element_text
 #' @export
 plot_null_distribution <- function(sig,
                                 bins = 40L,
@@ -323,4 +320,72 @@ plot_null_distribution <- function(sig,
         ggplot2::theme(
             plot.title = ggplot2::element_text(face = "bold")
         )
+}
+
+#' Plot coverage profile for a sample
+#'
+#' @param sample Character. Sample name to filter and plot.
+#' @param combined A data.frame or tibble from [load_all_samples()].
+#'   Must contain columns `sample`, `group`, `bin_mid`, and `norm_cov`.
+#' @param window Numeric. Maximum x-axis value (distance from Anchor, bp).
+#' @param log_scale Logical. If TRUE, log-transform `norm_cov` and label axis accordingly. Default FALSE.
+#'
+#' @examples
+#'
+#' extdata_dir <- system.file("extdata", package = "CovDecayAnalyzer")
+#'meta <- read.csv(
+#'  file.path(extdata_dir, "sample_metadata.csv"),
+#'  stringsAsFactors = FALSE
+#')
+#'meta$coverage_file <- breseq_coverage_paths(meta$sample, extdata_dir)
+#'combined <- load_all_samples(
+#'  sample_metadata = meta,
+#'  bin_size        = 100,
+#'  genome_length   = 2000
+#')
+#'plot_sample("A1", combined, anchor_position = 1000, window = 1000)
+#' @return A ggplot object showing the coverage decay profile with a log-linear fit line.
+#'
+#' @importFrom ggplot2 ggplot aes geom_line geom_smooth scale_fill_brewer labs theme_minimal theme element_text
+#' @export
+plot_sample <- function(sample, combined, anchor_position, window, log_scale = F, palette = "Set1"){
+  if (!is.data.frame(combined)) {
+    stop("`combined` must be a data.frame or tibble.")
+  }
+  required <- c("sample", "group", "bin_mid", "norm_cov")
+  missing_cols <- setdiff(required, names(combined))
+  if (length(missing_cols) > 0L) {
+    stop(sprintf(
+      "`combined` is missing required column(s): %s",
+      paste(missing_cols, collapse = ", ")
+    ))
+  }
+  if (!"distance_from_anchor" %in% names(combined)) {
+    if (is.null(anchor_position)) {
+      stop("Provide `anchor_position` or a `distance_from_anchor` ",
+           "column in `combined`.")
+    }
+    combined <- add_distance_from_anchor(combined, anchor_position)
+  }
+
+  combined$group <- factor(combined$group)
+  sdat <- combined[combined$sample %in% sample,]
+  grp  <- unique(sdat$group)
+
+  y_lab <- if (log_scale) "Log Normalized Coverage" else "Normalized Coverage"
+  if(log_scale) sdat$norm_cov = log(sdat$norm_cov)
+
+  ggplot2::ggplot(sdat, ggplot2::aes(x = bin_mid, y = norm_cov)) +
+    ggplot2::geom_line(linewidth = 0.8) +
+    ggplot2::geom_smooth(method = "lm", linetype = "dashed", se = FALSE) +
+    ggplot2::scale_fill_brewer(palette = palette) +
+    ggplot2::coord_cartesian(xlim = c(0, window)) +
+    ggplot2::labs(
+      title    = paste0("Coverage Profile: ", sample, " (", grp, ")"),
+      subtitle = "Red dashed line = log-linear fit",
+      x = "Distance from Anchor (bp)",
+      y = y_lab
+    ) +
+    ggplot2::theme_minimal(base_size = 14) +
+    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
 }

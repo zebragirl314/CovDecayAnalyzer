@@ -125,8 +125,7 @@ compute_viral_rpm <- function(viral_reads, human_reads) {
 #' )
 #' plot_rpm_by_group(rpm_df)
 #'
-#' @importFrom ggplot2 ggplot aes stat_summary geom_jitter mean_sdl
-#'   labs theme_bw theme element_text
+#' @importFrom ggplot2 ggplot aes stat_summary geom_jitter mean_sdl labs theme_bw theme element_text
 #' @export
 plot_rpm_by_group <- function(rpm_df,
                             group_col = "group",
