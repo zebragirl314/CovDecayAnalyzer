@@ -22,6 +22,9 @@ Must contain columns \code{sample}, \code{group}, \code{bin_mid}, and \code{norm
 \item{window}{Numeric. Maximum x-axis value (distance from Anchor, bp).}
 
 \item{log_scale}{Logical. If TRUE, log-transform \code{norm_cov} and label axis accordingly. Default FALSE.}
+
+\item{palette}{Character scalar. Name of a
+\code{RColorBrewer}-compatible palette. Default \code{"Set1"}.}
 }
 \value{
 A ggplot object showing the coverage decay profile with a log-linear fit line.

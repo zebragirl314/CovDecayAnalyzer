@@ -329,6 +329,8 @@ plot_null_distribution <- function(sig,
 #'   Must contain columns `sample`, `group`, `bin_mid`, and `norm_cov`.
 #' @param window Numeric. Maximum x-axis value (distance from Anchor, bp).
 #' @param log_scale Logical. If TRUE, log-transform `norm_cov` and label axis accordingly. Default FALSE.
+#' @param palette Character scalar. Name of a
+#'   `RColorBrewer`-compatible palette. Default `"Set1"`.
 #'
 #' @examples
 #'

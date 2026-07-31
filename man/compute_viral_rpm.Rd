@@ -45,7 +45,6 @@ compute_viral_rpm(
     viral_reads = c(12345, 67890, 45000),
     human_reads = c(1e7, 1.2e7, 9e6)
 )
-
 }
 \seealso{
 \code{\link[=plot_rpm_by_group]{plot_rpm_by_group()}} for the standard summary

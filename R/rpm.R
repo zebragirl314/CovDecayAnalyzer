@@ -49,8 +49,7 @@
 #'     viral_reads = c(12345, 67890, 45000),
 #'     human_reads = c(1e7, 1.2e7, 9e6)
 #' )
-#'
-#' @export
+
 compute_viral_rpm <- function(viral_reads, human_reads) {
     if (!is.numeric(viral_reads) || !is.numeric(human_reads)) {
         stop("`viral_reads` and `human_reads` must be numeric vectors.")
@@ -126,7 +125,6 @@ compute_viral_rpm <- function(viral_reads, human_reads) {
 #' plot_rpm_by_group(rpm_df)
 #'
 #' @importFrom ggplot2 ggplot aes stat_summary geom_jitter mean_sdl labs theme_bw theme element_text
-#' @export
 plot_rpm_by_group <- function(rpm_df,
                             group_col = "group",
                             rpm_col   = "viral_rpm",
