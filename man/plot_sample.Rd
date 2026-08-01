@@ -19,6 +19,10 @@ plot_sample(
 \item{combined}{A data.frame or tibble from \code{\link[=load_all_samples]{load_all_samples()}}.
 Must contain columns \code{sample}, \code{group}, \code{bin_mid}, and \code{norm_cov}.}
 
+\item{anchor_position}{Non-negative numeric scalar. Reference
+coordinate for distance calculation. Ignored if \code{combined}
+already contains \code{distance_from_anchor}.}
+
 \item{window}{Numeric. Maximum x-axis value (distance from Anchor, bp).}
 
 \item{log_scale}{Logical. If TRUE, log-transform \code{norm_cov} and label axis accordingly. Default FALSE.}

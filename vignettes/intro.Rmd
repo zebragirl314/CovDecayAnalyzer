@@ -318,38 +318,6 @@ methods vignette for a table of the four meaningful combinations.
 plot_null_distribution(sig)
 ```
 
-# Viral reads-per-million summary
-
-Independent of the decay analysis, viral RPM (reads per million host
-reads) is a commonly-reported summary of viral yield across samples.
-`compute_viral_rpm()` computes RPM vectorised over samples given
-viral read counts and host read counts, and `plot_rpm_by_group()`
-draws a simple by-group barplot with error bars.
-
-Because the shipped example data does not include host read counts,
-we illustrate with a small synthetic tibble:
-
-```{r rpm-example}
-set.seed(1)
-rpm_df <- data.frame(
-    sample    = paste0("s", 1:12),
-    group     = rep(c("WT-GCV", "WT+GCV", "FV-GCV", "FV+GCV"), each = 3),
-    viral_rpm = c(
-        rnorm(3, 3000, 500),
-        rnorm(3, 1500, 300),
-        rnorm(3, 2500, 400),
-        rnorm(3, 1200, 250)
-    )
-)
-
-plot_rpm_by_group(rpm_df)
-```
-
-In a typical breseq-based workflow, viral read counts come from the
-`total_reads` field of `output/summary.json`, and host read counts
-come from the concordant-pair line in bowtie2's alignment log.
-Extracting these is a small shell script and is not part of the R
-package.
 
 # Adapting to your own data
 

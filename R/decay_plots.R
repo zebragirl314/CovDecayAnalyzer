@@ -327,6 +327,9 @@ plot_null_distribution <- function(sig,
 #' @param sample Character. Sample name to filter and plot.
 #' @param combined A data.frame or tibble from [load_all_samples()].
 #'   Must contain columns `sample`, `group`, `bin_mid`, and `norm_cov`.
+#' @param anchor_position Non-negative numeric scalar. Reference
+#'   coordinate for distance calculation. Ignored if `combined`
+#'   already contains `distance_from_anchor`.
 #' @param window Numeric. Maximum x-axis value (distance from Anchor, bp).
 #' @param log_scale Logical. If TRUE, log-transform `norm_cov` and label axis accordingly. Default FALSE.
 #' @param palette Character scalar. Name of a

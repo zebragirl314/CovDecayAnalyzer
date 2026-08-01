@@ -40,9 +40,6 @@
 #'    to build a null distribution of interaction F-statistics, then
 #'    reports an empirical p-value for the anchor of scientific interest.
 #'
-#' 5. Optionally summarize viral read yield across treatment groups with
-#'    [compute_viral_rpm()] and [plot_rpm_by_group()].
-#'
 #' @section Input assumptions:
 #'
 #' The package assumes per-base coverage input in the format produced by
