@@ -45,8 +45,6 @@ a Kenward-Roger small-sample F test.
 mixed-model fit at many random anchor positions across the genome
 to build a null distribution of interaction F-statistics, then
 reports an empirical p-value for the anchor of scientific interest.
-\item Optionally summarize viral read yield across treatment groups with
-\code{\link[=compute_viral_rpm]{compute_viral_rpm()}} and \code{\link[=plot_rpm_by_group]{plot_rpm_by_group()}}.
 }
 }
 
@@ -98,6 +96,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Carly Bobak \email{Carly.A.Bobak@dartmouth.edu}
   \item Olivia Daigle
   \item Noelle Kosarek
 }

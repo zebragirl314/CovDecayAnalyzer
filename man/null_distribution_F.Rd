@@ -45,9 +45,9 @@ the null does not include overlapping windows. Ignored if \code{NULL}.}
 of the sampled positions. If \code{NULL}, no seed is set.}
 
 \item{BPPARAM}{A \code{BiocParallel::BiocParallelParam} instance
-controlling parallelism. Default \code{\link[BiocParallel:SerialParam-class]{BiocParallel::SerialParam()}}.
-Use \link[BiocParallel:MulticoreParam-class]{BiocParallel::MulticoreParam} on Unix-like systems or
-\link[BiocParallel:SnowParam-class]{BiocParallel::SnowParam} on Windows.}
+controlling parallelism. Default \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}}.
+Use \link[BiocParallel:MulticoreParam]{BiocParallel::MulticoreParam} on Unix-like systems or
+\link[BiocParallel:SnowParam]{BiocParallel::SnowParam} on Windows.}
 }
 \value{
 A numeric vector of length at most \code{n_random} containing
