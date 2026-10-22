@@ -96,7 +96,6 @@ Useful links:
 
 Authors:
 \itemize{
-  \item Carly Bobak \email{Carly.A.Bobak@dartmouth.edu}
   \item Olivia Daigle
   \item Noelle Kosarek
 }
