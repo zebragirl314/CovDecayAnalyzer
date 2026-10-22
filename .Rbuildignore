@@ -4,3 +4,9 @@
 ^LICENSE\.md$
 ^doc$
 ^Meta$
+^CLAUDE\.md$
+^NOTES\.md$
+^PLAN\.md$
+^logs$
+^session-logs$
+^session-prompts$

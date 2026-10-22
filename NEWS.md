@@ -4,6 +4,21 @@
   `n_random` exceeds the number of allowed anchor positions, replacing both an
   infinite loop (with `exclude`) and the cryptic base-R sampling error
   (`n_random > genome_length`).
+* `null_distribution_F()` now attaches the number of dropped fits as an
+  `"n_failed"` attribute, and `test_decay_significance()` returns it as
+  `n_null_failed` and prints it, so fit failures are no longer silent.
+* `test_decay_slopes()` now returns `singular` and `conv_code` in the
+  `decay_test` object, and `print()` warns when the fit is singular or the
+  optimizer did not report convergence.
+* Breaking: `test_decay_slopes()` now errors, naming the group(s) and counts,
+  when any group has fewer than two samples.
+* Breaking: the default `exclude_radius` in `test_decay_significance()` is now
+  `window` when a `window` is supplied (it was `0`), so random anchors no
+  longer overlap the observed window; pass `exclude_radius = 0` for the old
+  behavior.
+* The `null_distribution_F()` documentation now describes the
+  without-replacement anchor sampling accurately and frames `(k + 1) / (n + 1)`
+  as a conservative convention rather than a direct Phipson-Smyth derivation.
 
 # CovDecayAnalyzer 0.1.0
 

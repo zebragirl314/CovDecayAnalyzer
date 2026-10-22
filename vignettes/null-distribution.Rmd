@@ -295,17 +295,23 @@ against this background.
 
 ## Construction
 
-`null_distribution_F()` samples $N$ positions uniformly from
-$[1, \texttt{genome\_length}]$, and at each position refits the LMM
+`null_distribution_F()` samples $N$ positions uniformly, without
+replacement, from $[1, \texttt{genome\_length}]$, and at each position refits the LMM
 above, extracting the Kenward-Roger F for the distance-by-group
 interaction. Fits that fail (rare, and typically near the genome
 ends where the window is degenerate) are dropped. The returned
-vector has length at most $N$.
+vector has length at most $N$, and the number of dropped fits is
+attached as the `"n_failed"` attribute (`test_decay_significance()`
+returns it as `n_null_failed`).
 
 An optional `exclude` argument lets you specify a region around the
 observed anchor to remove from the random-position pool, to prevent
 overlap between the observed window and null windows.
-`test_decay_significance()` exposes this via `exclude_radius`.
+`test_decay_significance()` exposes this via `exclude_radius`. When a
+`window` is supplied, `exclude_radius` defaults to the window size, so
+null windows cannot overlap the observed one; with no window it defaults
+to 0 (no exclusion). Pass `exclude_radius = 0` explicitly to keep the
+whole genome in the pool when using a window.
 
 ## Empirical p-value
 
@@ -319,14 +325,20 @@ p_{\text{emp}} = \frac{k + 1}{n + 1},
 k = \# \{ F_i : F_i \ge F_{\text{obs}} \}.
 $$
 
-The `+1` in both numerator and denominator is not smoothing. It is
-the correct exact expression for a Monte Carlo test where the null
-samples are drawn with replacement, as derived by Phipson and Smyth
-(2010). Using the more intuitive $k/n$ estimator systematically
-understates the true p-value by roughly $1/n$ and can produce
-impossible p-values of exactly zero. The corrected form has a
-minimum achievable value of $1/(n+1)$, which is the smallest p-value
-that a Monte Carlo test with $n$ samples can honestly report.
+We compute the p-value with the $+1$ in both numerator and
+denominator, and we use it as a conservative convention rather than as
+an exact result. The reasoning is that the observed statistic is itself
+one plausible member of the reference set: if the anchor is nothing
+special, $F_{\text{obs}}$ is just another draw alongside the $n$ random
+anchors. Counting it keeps the p-value strictly above zero, so we never
+report an impossible $p = 0$, and it never gives a smaller value than
+the plain $k/n$ estimator. The random anchors are sampled without
+replacement from the finite set of integer genomic positions, not drawn
+with replacement, so this is a different resampling scheme from the one
+Phipson and Smyth (2010) analyze. We cite their paper for the case
+against reporting zero p-values from Monte Carlo samples, and for the
+$(k+1)/(n+1)$ form that comes out of it, not as a proof that the form is
+exact here. The smallest value the test can report is $1/(n+1)$.
 
 ## Interpretation: the two p-values together
 
@@ -337,11 +349,19 @@ different ways:
 |                                | Small empirical p                  | Large empirical p                                            |
 |:-------------------------------|:-----------------------------------|:-------------------------------------------------------------|
 | **Small LMM p (at anchor)**    | Real effect, and it is specific to this anchor. Best case for a biological claim. | Real effect, but not specific to this anchor. Suggests widespread coverage anomalies that happen to correlate with treatment; interpret with caution. |
-| **Large LMM p (at anchor)**    | Cannot occur by construction: if the observed F is unremarkable, it cannot be extreme relative to a null derived from data with the same structure. | No detectable group difference in decay at this anchor.      |
+| **Large LMM p (at anchor)**    | Possible, and informative. The effect at this anchor is not individually significant, but F at random anchors is systematically lower still, so this anchor stands out from the rest of the genome. Interpret as "unusual for this genome, not strong on its own". | No detectable group difference in decay at this anchor.      |
 
-The lower-left cell is precluded because the empirical p-value uses
-$F_{\text{obs}}$ as the reference; if that reference is not
-extreme, no null can make it look extreme.
+The lower-left cell is not precluded. The two p-values compare
+$F_{\text{obs}}$ to different references: the LMM p-value to an $F$
+distribution with Kenward-Roger degrees of freedom, the empirical
+p-value to the $F$ values observed at other anchors in this genome. If
+the group effect is weak everywhere, $F_{\text{obs}}$ can be modest
+(say, an LMM p of 0.2) and still exceed nearly all of the null, because
+the null values are smaller. The combination says the anchor is unusual
+relative to the rest of the genome even though the effect at it is not
+individually significant. We would treat it as a prompt to look
+further, not as evidence of an effect, since the group difference
+itself is not supported at this anchor.
 
 The upper-right cell is the most nuanced case. In practice, a small
 LMM p combined with a large empirical p suggests one of two
@@ -366,7 +386,8 @@ The random-anchor approach assumes:
   Consider masking or restricting the sampled positions.
 - **The LMM is fit-able at random anchors.** In practice a small
   fraction of random anchors near genome ends produce singular fits.
-  These are dropped and the effective $n$ is reported.
+  These are dropped, and the number dropped is reported as
+  `n_null_failed`.
 - **The number of random anchors is large enough.** The minimum
   achievable p-value is $1/(n_{\text{random}} + 1)$. For screens,
   500 is a reasonable default; for publication-grade significance

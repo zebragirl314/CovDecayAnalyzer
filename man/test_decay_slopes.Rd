@@ -54,6 +54,12 @@ test.}
 (per base pair) with confidence intervals.}
 \item{\code{pairwise}}{Tibble of pairwise group slope contrasts
 (per base pair), Tukey-adjusted.}
+\item{\code{singular}}{Logical. \code{TRUE} if \code{lme4::isSingular()} reports
+the fit is singular (a variance component or correlation on the
+boundary). Kenward-Roger results from a singular fit should be
+interpreted with caution.}
+\item{\code{conv_code}}{Integer, or \code{NULL} if the optimizer reported
+none. Convergence code from the optimizer (\code{0} is success).}
 \item{\code{n_samples}, \code{n_bins}}{Fit summary statistics.}
 \item{\code{anchor_position}, \code{window}}{Inputs echoed for
 provenance.}
@@ -135,6 +141,16 @@ units on the way out, so the returned \code{group_slopes} and \code{pairwise}
 tables report slopes in the same units the user expects
 (log_norm_cov per base pair). The F-statistic and p-value are
 invariant to this rescaling.
+}
+
+\section{Input requirements}{
+
+
+At least two groups are required, and every group must contain at
+least two samples. A group with a single sample is an error, not a
+warning, because its slope is identifiable only through the
+random-effects structure. The error names the offending group(s) and
+their sample counts.
 }
 
 \examples{

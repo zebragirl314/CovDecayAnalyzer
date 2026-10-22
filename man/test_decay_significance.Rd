@@ -10,7 +10,7 @@ test_decay_significance(
   genome_length,
   n_random = 500L,
   window = NULL,
-  exclude_radius = 0,
+  exclude_radius = if (is.null(window)) 0 else window,
   seed = NULL,
   BPPARAM = BiocParallel::SerialParam()
 )
@@ -35,9 +35,12 @@ comparable.}
 
 \item{exclude_radius}{Non-negative numeric scalar. If positive,
 exclude a band of width \code{2 * exclude_radius} centered on
-\code{anchor_position} from the random-anchor pool. Default 0 (no
-exclusion). Set to \code{window} (or larger) to guarantee no overlap
-between random-anchor windows and the observed-anchor window.}
+\code{anchor_position} from the random-anchor pool. Default is \code{0} (no
+exclusion) when \code{window} is \code{NULL} and \code{window} otherwise, which
+guarantees no overlap between random-anchor windows and the
+observed-anchor window. \strong{Behavior change:} earlier versions
+defaulted to \code{0} regardless of \code{window}. To recover that behavior
+when supplying a \code{window}, pass \code{exclude_radius = 0} explicitly.}
 
 \item{seed}{Optional integer. Random seed for reproducibility of
 the sampled random anchor positions.}
@@ -53,6 +56,8 @@ with elements:
 \code{anchor_position}, as returned by \code{\link[=test_decay_slopes]{test_decay_slopes()}}.}
 \item{\code{null_F}}{Numeric vector of F-statistics from the random
 anchor positions (successful fits only).}
+\item{\code{n_null_failed}}{Integer. Number of random anchors whose fit
+failed and was dropped from \code{null_F}.}
 \item{\code{empirical_p}}{Numeric scalar. Empirical p-value for
 the observed F under the null distribution.}
 \item{\code{anchor_position}}{Anchor coordinate echoed for

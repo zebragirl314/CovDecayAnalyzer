@@ -111,6 +111,14 @@
 #'   singular-fit messages from `lme4`. Fitting errors are still raised
 #'   to the caller.
 #'
+#' @section Input requirements:
+#'
+#' At least two groups are required, and every group must contain at
+#' least two samples. A group with a single sample is an error, not a
+#' warning, because its slope is identifiable only through the
+#' random-effects structure. The error names the offending group(s) and
+#' their sample counts.
+#'
 #' @return An S3 object of class `"decay_test"`, a named list with
 #'   elements:
 #'   \describe{
@@ -129,6 +137,12 @@
 #'       (per base pair) with confidence intervals.}
 #'     \item{`pairwise`}{Tibble of pairwise group slope contrasts
 #'       (per base pair), Tukey-adjusted.}
+#'     \item{`singular`}{Logical. `TRUE` if `lme4::isSingular()` reports
+#'       the fit is singular (a variance component or correlation on the
+#'       boundary). Kenward-Roger results from a singular fit should be
+#'       interpreted with caution.}
+#'     \item{`conv_code`}{Integer, or `NULL` if the optimizer reported
+#'       none. Convergence code from the optimizer (`0` is success).}
 #'     \item{`n_samples`, `n_bins`}{Fit summary statistics.}
 #'     \item{`anchor_position`, `window`}{Inputs echoed for
 #'       provenance.}
@@ -228,6 +242,20 @@ test_decay_slopes <- function(combined,
     if (n_groups < 2L) {
         stop("Need at least two groups to test group differences.")
     }
+
+    ## Every group needs at least two samples; a singleton group's slope
+    ## is estimable only through the random-effects structure.
+    per_group <- vapply(
+        split(combined$sample, combined$group),
+        function(s) length(unique(s)),
+        integer(1L)
+    )
+    thin <- per_group[per_group < 2L]
+    if (length(thin) > 0L) {
+        msgs <- sprintf("Group '%s' has only %d sample", names(thin), thin)
+        stop(paste0(paste(msgs, collapse = "; "),
+            "; at least 2 samples per group are required."))
+    }
     n_samples <- length(unique(combined$sample))
     if (n_samples < 3L) {
         stop("Need at least three samples for random-effects fitting.")
@@ -263,6 +291,12 @@ test_decay_slopes <- function(combined,
             )
         )
     )
+
+    ## Fit diagnostics. check.conv.* are set to "ignore" above so lme4
+    ## does not warn; report the outcome here instead.
+    singular  <- lme4::isSingular(fit)
+    conv_opt  <- fit@optinfo$conv$opt
+    conv_code <- if (is.null(conv_opt)) NULL else as.integer(conv_opt)
 
     ## Kenward-Roger ANOVA. F, df, and p are scale-invariant so no
     ## adjustment needed on this table.
@@ -309,6 +343,8 @@ test_decay_slopes <- function(combined,
             df1             = as.numeric(df1),
             df2             = as.numeric(df2),
             p_value         = as.numeric(p_val),
+            singular        = singular,
+            conv_code       = conv_code,
             group_slopes    = tibble::as_tibble(group_slopes),
             pairwise        = tibble::as_tibble(pairwise),
             n_samples       = n_samples,
@@ -379,6 +415,15 @@ print.decay_test <- function(x, digits = 4L, ...) {
         x$df1, x$df2,
         format(round(x$F_stat, digits)),
         format.pval(x$p_value, digits = digits)))
+    if (isTRUE(x$singular)) {
+        cat("Warning: model fit was singular; results should be",
+            "interpreted with caution.\n")
+    }
+    if (!is.null(x$conv_code) && x$conv_code != 0L) {
+        cat(sprintf(paste("Warning: optimizer reported convergence code",
+            "%d; results should be interpreted with caution.\n"),
+            x$conv_code))
+    }
     cat("\nPer-group decay slopes (emtrends, per bp)\n")
     print(x$group_slopes, n = Inf)
     cat("\nPairwise group contrasts (Tukey-adjusted, per bp)\n")

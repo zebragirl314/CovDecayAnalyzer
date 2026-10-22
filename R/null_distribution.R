@@ -35,8 +35,9 @@
 #'
 #' Each iteration:
 #'
-#' 1. Draws a random position uniformly from `[1, genome_length]`
-#'    (optionally excluding a region near the observed anchor).
+#' 1. Takes the next position from a draw, without replacement, from the
+#'    integers in `[1, genome_length]` (optionally excluding a region
+#'    near the observed anchor).
 #' 2. Recomputes `distance_from_anchor` for every bin relative to
 #'    that random position.
 #' 3. Refits the LMM and extracts the Kenward-Roger F-statistic for the
@@ -46,10 +47,30 @@
 #' available (the genome length, minus any excluded region), all
 #' available positions are used and a warning reports both numbers.
 #'
-#' Failed fits (singular models, non-converging optimizers) are dropped
-#' silently. The returned vector length may therefore be smaller than
-#' `n_random`; the actual retention rate is a useful diagnostic and is
-#' reported by [test_decay_significance()].
+#' Failed fits (those that raise an error) are dropped. The returned
+#' vector length may therefore be smaller than `n_random`. The number of
+#' dropped fits is attached to the result as the `"n_failed"` attribute
+#' and is reported by [test_decay_significance()].
+#'
+#' Anchor positions are sampled without replacement, so no position is
+#' used twice and the null contains at most as many distinct anchors as
+#' there are allowed integer positions. The draws are not independent
+#' in an effective sense: with bins wider than one base pair, anchors in
+#' the same bin give nearly identical F-statistics, and nearby anchors
+#' with overlapping windows give correlated ones. The effective number
+#' of independent null values is therefore smaller than `n_random`.
+#'
+#' The empirical p-value computed from this null by [empirical_pvalue()]
+#' uses the `(k + 1) / (n + 1)` form. We use it as a conservative
+#' convention: counting the observed statistic as one member of the
+#' reference set keeps the p-value strictly above zero and never reports
+#' a smaller value than `k / n` would. Phipson and Smyth (2010) derive
+#' this form for Monte Carlo p-values from randomly drawn permutations;
+#' the anchor null here is a different resampling scheme, so the
+#' reference motivates the convention rather than proving it exact. Its
+#' validity as a test of anchor specificity rests on the assumption that
+#' the observed anchor is exchangeable with the sampled anchors under
+#' the null that nothing is special about it.
 #'
 #' Runtime scales linearly in `n_random` times the cost of one LMM fit.
 #' On typical HCMV data (~30 samples, ~240 bins each), one fit takes on
@@ -90,7 +111,8 @@
 #'   sampled random anchor positions. Non-finite values from failed
 #'   fits are removed. The vector is also shorter than `n_random`, with
 #'   a warning, when fewer than `n_random` anchor positions are
-#'   available.
+#'   available. The attribute `"n_failed"` holds the number of anchors
+#'   whose fit failed and was dropped.
 #'
 #' @references
 #' Phipson B, Smyth GK (2010). Permutation p-values should never be
@@ -184,8 +206,11 @@ null_distribution_F <- function(combined,
         },
         BPPARAM = BPPARAM
     )
-    F_vec <- unlist(F_list, use.names = FALSE)
-    F_vec[is.finite(F_vec)]
+    F_vec <- as.numeric(unlist(F_list, use.names = FALSE))
+    keep <- is.finite(F_vec)
+    out <- F_vec[keep]
+    attr(out, "n_failed") <- sum(!keep)
+    out
 }
 
 
@@ -204,13 +229,9 @@ null_distribution_F <- function(combined,
 #' where `k` is the number of null values greater than or equal to the
 #' observed statistic and `n` is the size of the null distribution.
 #'
-#' The `+1` in both numerator and denominator is not an ad-hoc smoothing
-#' term; it is the correct exact p-value expression for Monte Carlo
-#' permutation tests where permutations are sampled with replacement,
-#' as derived by Phipson & Smyth (2010). Using the uncorrected estimator
-#' `k / n` produces p-values that are systematically understated by
-#' approximately `1 / n`, which becomes serious in multiple testing
-#' contexts and can produce impossible p-values of exactly zero.
+#' We use this form as a conservative convention. It keeps the p-value
+#' strictly above zero and is never smaller than `k / n`; see Phipson &
+#' Smyth (2010) for the case against zero Monte Carlo p-values.
 #'
 #' Non-finite values in `null_dist` are dropped before computation.
 #'
@@ -305,9 +326,12 @@ empirical_pvalue <- function(observed, null_dist) {
 #'   comparable.
 #' @param exclude_radius Non-negative numeric scalar. If positive,
 #'   exclude a band of width `2 * exclude_radius` centered on
-#'   `anchor_position` from the random-anchor pool. Default 0 (no
-#'   exclusion). Set to `window` (or larger) to guarantee no overlap
-#'   between random-anchor windows and the observed-anchor window.
+#'   `anchor_position` from the random-anchor pool. Default is `0` (no
+#'   exclusion) when `window` is `NULL` and `window` otherwise, which
+#'   guarantees no overlap between random-anchor windows and the
+#'   observed-anchor window. **Behavior change:** earlier versions
+#'   defaulted to `0` regardless of `window`. To recover that behavior
+#'   when supplying a `window`, pass `exclude_radius = 0` explicitly.
 #' @param seed Optional integer. Random seed for reproducibility of
 #'   the sampled random anchor positions.
 #' @param BPPARAM A `BiocParallel::BiocParallelParam` instance
@@ -320,6 +344,8 @@ empirical_pvalue <- function(observed, null_dist) {
 #'       `anchor_position`, as returned by [test_decay_slopes()].}
 #'     \item{`null_F`}{Numeric vector of F-statistics from the random
 #'       anchor positions (successful fits only).}
+#'     \item{`n_null_failed`}{Integer. Number of random anchors whose fit
+#'       failed and was dropped from `null_F`.}
 #'     \item{`empirical_p`}{Numeric scalar. Empirical p-value for
 #'       the observed F under the null distribution.}
 #'     \item{`anchor_position`}{Anchor coordinate echoed for
@@ -364,7 +390,8 @@ test_decay_significance <- function(combined,
                                     genome_length,
                                     n_random = 500L,
                                     window = NULL,
-                                    exclude_radius = 0,
+                                    exclude_radius = if (is.null(window)) 0
+                                        else window,
                                     seed = NULL,
                                     BPPARAM = BiocParallel::SerialParam()) {
     .validate_position(anchor_position, "anchor_position",
@@ -396,12 +423,16 @@ test_decay_significance <- function(combined,
         BPPARAM       = BPPARAM
     )
 
+    n_null_failed <- attr(null_F, "n_failed")
+    null_F <- as.numeric(null_F)
+
     p_emp <- empirical_pvalue(anchor_test$F_stat, null_F)
 
     structure(
         list(
             anchor_test     = anchor_test,
             null_F          = null_F,
+            n_null_failed   = n_null_failed,
             empirical_p     = p_emp,
             anchor_position = anchor_position,
             genome_length   = genome_length,
@@ -438,8 +469,15 @@ print.decay_significance <- function(x, digits = 4L, ...) {
         format(round(x$anchor_test$F_stat, digits))))
     cat(sprintf("Anchor LMM p      : %s\n",
         format.pval(x$anchor_test$p_value, digits = digits)))
-    cat(sprintf("Null F fits       : %d of %d requested\n",
-        length(x$null_F), x$n_random))
+    n_ok <- length(x$null_F)
+    if (is.null(x$n_null_failed)) {
+        cat(sprintf("Null F fits       : %d of %d requested\n",
+            n_ok, x$n_random))
+    } else {
+        cat(sprintf(
+            "Null F fits       : %d of %d random anchors succeeded (%d dropped due to fit failure)\n",
+            n_ok, n_ok + x$n_null_failed, x$n_null_failed))
+    }
     cat(sprintf("Empirical p-value : %s\n",
         format.pval(x$empirical_p, digits = digits)))
     invisible(x)

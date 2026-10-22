@@ -32,13 +32,9 @@ The formula is
 where \code{k} is the number of null values greater than or equal to the
 observed statistic and \code{n} is the size of the null distribution.
 
-The \code{+1} in both numerator and denominator is not an ad-hoc smoothing
-term; it is the correct exact p-value expression for Monte Carlo
-permutation tests where permutations are sampled with replacement,
-as derived by Phipson & Smyth (2010). Using the uncorrected estimator
-\code{k / n} produces p-values that are systematically understated by
-approximately \code{1 / n}, which becomes serious in multiple testing
-contexts and can produce impossible p-values of exactly zero.
+We use this form as a conservative convention. It keeps the p-value
+strictly above zero and is never smaller than \code{k / n}; see Phipson &
+Smyth (2010) for the case against zero Monte Carlo p-values.
 
 Non-finite values in \code{null_dist} are dropped before computation.
 

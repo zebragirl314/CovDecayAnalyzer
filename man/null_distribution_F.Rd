@@ -55,7 +55,8 @@ the Kenward-Roger F-statistics from successful fits at the
 sampled random anchor positions. Non-finite values from failed
 fits are removed. The vector is also shorter than \code{n_random}, with
 a warning, when fewer than \code{n_random} anchor positions are
-available.
+available. The attribute \code{"n_failed"} holds the number of anchors
+whose fit failed and was dropped.
 }
 \description{
 Repeatedly refits the linear mixed model of \code{\link[=test_decay_slopes]{test_decay_slopes()}} at
@@ -76,8 +77,9 @@ This is exactly what the null distribution provides.
 
 Each iteration:
 \enumerate{
-\item Draws a random position uniformly from \verb{[1, genome_length]}
-(optionally excluding a region near the observed anchor).
+\item Takes the next position from a draw, without replacement, from the
+integers in \verb{[1, genome_length]} (optionally excluding a region
+near the observed anchor).
 \item Recomputes \code{distance_from_anchor} for every bin relative to
 that random position.
 \item Refits the LMM and extracts the Kenward-Roger F-statistic for the
@@ -88,10 +90,30 @@ If \code{n_random} exceeds the number of distinct integer positions
 available (the genome length, minus any excluded region), all
 available positions are used and a warning reports both numbers.
 
-Failed fits (singular models, non-converging optimizers) are dropped
-silently. The returned vector length may therefore be smaller than
-\code{n_random}; the actual retention rate is a useful diagnostic and is
-reported by \code{\link[=test_decay_significance]{test_decay_significance()}}.
+Failed fits (those that raise an error) are dropped. The returned
+vector length may therefore be smaller than \code{n_random}. The number of
+dropped fits is attached to the result as the \code{"n_failed"} attribute
+and is reported by \code{\link[=test_decay_significance]{test_decay_significance()}}.
+
+Anchor positions are sampled without replacement, so no position is
+used twice and the null contains at most as many distinct anchors as
+there are allowed integer positions. The draws are not independent
+in an effective sense: with bins wider than one base pair, anchors in
+the same bin give nearly identical F-statistics, and nearby anchors
+with overlapping windows give correlated ones. The effective number
+of independent null values is therefore smaller than \code{n_random}.
+
+The empirical p-value computed from this null by \code{\link[=empirical_pvalue]{empirical_pvalue()}}
+uses the \code{(k + 1) / (n + 1)} form. We use it as a conservative
+convention: counting the observed statistic as one member of the
+reference set keeps the p-value strictly above zero and never reports
+a smaller value than \code{k / n} would. Phipson and Smyth (2010) derive
+this form for Monte Carlo p-values from randomly drawn permutations;
+the anchor null here is a different resampling scheme, so the
+reference motivates the convention rather than proving it exact. Its
+validity as a test of anchor specificity rests on the assumption that
+the observed anchor is exchangeable with the sampled anchors under
+the null that nothing is special about it.
 
 Runtime scales linearly in \code{n_random} times the cost of one LMM fit.
 On typical HCMV data (~30 samples, ~240 bins each), one fit takes on
