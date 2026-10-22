@@ -10,7 +10,7 @@ plot_coverage_decay(
   window = NULL,
   show_points = TRUE,
   loess_span = 0.3,
-  palette = "Set1"
+  palette = "okabe_ito"
 )
 }
 \arguments{
@@ -34,9 +34,11 @@ per-bin points on top of the group trends.}
 
 \item{loess_span}{Numeric in \verb{(0, 1]}. Passed to \code{geom_smooth(span = loess_span, method = "loess")}. Default 0.3.}
 
-\item{palette}{Character scalar. Name of a
-\code{RColorBrewer}-compatible palette used to color groups. Default
-\code{"Set1"}.}
+\item{palette}{Character scalar. \code{"okabe_ito"} (default) uses the
+Okabe-Ito colorblind-safe palette, which has eight colors, so at
+most eight groups. A Brewer palette name (e.g. \code{"Set1"}) uses
+\code{\link[ggplot2:scale_color_brewer]{ggplot2::scale_color_brewer()}} instead. Any other string falls back
+to Okabe-Ito with a warning.}
 }
 \value{
 A \code{ggplot} object. Not printed automatically; call \code{print()}

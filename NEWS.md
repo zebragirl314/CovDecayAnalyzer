@@ -1,5 +1,19 @@
 # CovDecayAnalyzer (development version, pre-0.1.0)
 
+* Breaking: `plot_sample()` argument order is now
+  `plot_sample(combined, sample, ...)` for consistency with the other
+  functions. `anchor_position` has no default, `window` defaults to `NULL`
+  (whole-genome view), and `log_scale` defaults to `TRUE`.
+* Bug fix: `plot_sample()` x-axis now shows distance from the anchor, as the
+  label claims, rather than the raw genomic coordinate. It also plots
+  `log_norm_cov` directly when `log_scale = TRUE`, the `palette` argument now
+  takes effect, the subtitle describes the line actually drawn, and an unknown
+  sample or a sample spanning several groups gives an informative error.
+* Breaking (behavior): default plot palettes are now Okabe-Ito for
+  colorblind-safe output (`plot_coverage_decay()`, `plot_decay_slopes()`,
+  `plot_sample()`), and the observed-F line in `plot_null_distribution()` is
+  Okabe-Ito vermillion (`"#D55E00"`). Brewer palette names are still accepted.
+  Okabe-Ito supports at most eight groups.
 * `null_distribution_F()` now returns a truncated vector with a warning when
   `n_random` exceeds the number of allowed anchor positions, replacing both an
   infinite loop (with `exclude`) and the cryptic base-R sampling error

@@ -8,7 +8,7 @@ plot_decay_slopes(
   slopes,
   show_jitter = TRUE,
   show_outliers = FALSE,
-  palette = "Set1"
+  palette = "okabe_ito"
 )
 }
 \arguments{
@@ -23,8 +23,10 @@ sample points via \code{geom_jitter}.}
 as points. Default \code{FALSE} (avoids double-plotting when
 \code{show_jitter = TRUE}).}
 
-\item{palette}{Character scalar. Name of a
-\code{RColorBrewer}-compatible palette. Default \code{"Set1"}.}
+\item{palette}{Character scalar. \code{"okabe_ito"} (default) uses the
+Okabe-Ito colorblind-safe palette (at most eight groups). A Brewer
+palette name (e.g. \code{"Set1"}) uses \code{\link[ggplot2:scale_fill_brewer]{ggplot2::scale_fill_brewer()}}
+instead. Any other string falls back to Okabe-Ito with a warning.}
 }
 \value{
 A \code{ggplot} object.

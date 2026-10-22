@@ -4,7 +4,7 @@
 \alias{plot_null_distribution}
 \title{Plot the random-anchor null F distribution with the observed value marked}
 \usage{
-plot_null_distribution(sig, bins = 40L, observed_color = "#D7191C")
+plot_null_distribution(sig, bins = 40L, observed_color = "#D55E00")
 }
 \arguments{
 \item{sig}{A \code{decay_significance} object as returned by
@@ -13,7 +13,8 @@ plot_null_distribution(sig, bins = 40L, observed_color = "#D7191C")
 \item{bins}{Positive integer. Number of histogram bins. Default 40.}
 
 \item{observed_color}{Character scalar. Color of the vertical line
-marking the observed F-statistic. Default \code{"#D7191C"} (red).}
+marking the observed F-statistic. Default \code{"#D55E00"} (Okabe-Ito
+vermillion), which stays distinct from the grey histogram.}
 }
 \value{
 A \code{ggplot} object.

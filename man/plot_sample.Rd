@@ -2,52 +2,87 @@
 % Please edit documentation in R/decay_plots.R
 \name{plot_sample}
 \alias{plot_sample}
-\title{Plot coverage profile for a sample}
+\title{Plot coverage profile for a single sample}
 \usage{
 plot_sample(
-  sample,
   combined,
+  sample,
   anchor_position,
-  window,
-  log_scale = F,
-  palette = "Set1"
+  window = NULL,
+  log_scale = TRUE,
+  palette = "okabe_ito"
 )
 }
 \arguments{
-\item{sample}{Character. Sample name to filter and plot.}
-
 \item{combined}{A data.frame or tibble from \code{\link[=load_all_samples]{load_all_samples()}}.
-Must contain columns \code{sample}, \code{group}, \code{bin_mid}, and \code{norm_cov}.}
+Must contain columns \code{sample}, \code{group}, \code{bin_mid}, and \code{norm_cov},
+plus \code{log_norm_cov} when \code{log_scale = TRUE}.}
+
+\item{sample}{Character scalar. Name of the sample to plot. Must be
+present in \code{combined$sample} and belong to a single group.}
 
 \item{anchor_position}{Non-negative numeric scalar. Reference
-coordinate for distance calculation. Ignored if \code{combined}
-already contains \code{distance_from_anchor}.}
+coordinate for distance calculation. No default. Not needed when
+\code{combined} already contains \code{distance_from_anchor}.}
 
-\item{window}{Numeric. Maximum x-axis value (distance from Anchor, bp).}
+\item{window}{Optional positive numeric scalar. If supplied,
+restricts the x-axis to \verb{[0, window]}. Default \code{NULL} shows the
+whole genome.}
 
-\item{log_scale}{Logical. If TRUE, log-transform \code{norm_cov} and label axis accordingly. Default FALSE.}
+\item{log_scale}{Logical. If \code{TRUE} (default), plot \code{log_norm_cov}; if
+\code{FALSE}, plot \code{norm_cov}.}
 
-\item{palette}{Character scalar. Name of a
-\code{RColorBrewer}-compatible palette. Default \code{"Set1"}.}
+\item{palette}{Character scalar. \code{"okabe_ito"} (default) uses the
+Okabe-Ito colorblind-safe palette. A Brewer palette name (e.g.
+\code{"Set1"}) uses \code{\link[ggplot2:scale_color_brewer]{ggplot2::scale_color_brewer()}} instead. Any other
+string falls back to Okabe-Ito with a warning.}
 }
 \value{
-A ggplot object showing the coverage decay profile with a log-linear fit line.
+A \code{ggplot} object.
 }
 \description{
-Plot coverage profile for a sample
+Draws one sample's per-bin coverage against distance from the anchor,
+with a dashed dark grey least-squares line as a visual guide. This is a
+per-sample companion to \code{\link[=plot_coverage_decay]{plot_coverage_decay()}}, useful for checking
+that the decay in an individual sample looks like what the group
+trend suggests.
+}
+\details{
+The fitted line is an ordinary least-squares fit of the plotted
+response on distance from the anchor, using all of the sample's bins.
+When \code{window} is supplied it only restricts the visible x-axis (via
+\code{coord_cartesian}); the fit still uses bins outside the window, as in
+\code{\link[=plot_coverage_decay]{plot_coverage_decay()}}. With \code{log_scale = TRUE} the response is the
+\code{log_norm_cov} column, the same quantity the formal tests model, so
+the line is the log-linear decay fit. With \code{log_scale = FALSE} the
+response is \code{norm_cov} and the line is a linear fit on the raw scale,
+which is not the model used for inference.
+
+The coverage line is colored by the sample's group, using the same
+palette positions as the other plot functions, so a group has the same
+color in every plot. The dashed fit line is always dark grey
+(\code{"#4a4a4a"}) so it stays visible against any group color.
+
+If \code{combined} already contains a \code{distance_from_anchor} column, it is
+used as-is and \code{anchor_position} is not evaluated. Otherwise
+\code{anchor_position} is required and distances are computed via
+\code{\link[=add_distance_from_anchor]{add_distance_from_anchor()}}.
 }
 \examples{
-
 extdata_dir <- system.file("extdata", package = "CovDecayAnalyzer")
 meta <- read.csv(
- file.path(extdata_dir, "sample_metadata.csv"),
- stringsAsFactors = FALSE
+    file.path(extdata_dir, "sample_metadata.csv"),
+    stringsAsFactors = FALSE
 )
 meta$coverage_file <- breseq_coverage_paths(meta$sample, extdata_dir)
 combined <- load_all_samples(
- sample_metadata = meta,
- bin_size        = 100,
- genome_length   = 2000
+    sample_metadata = meta,
+    bin_size        = 100,
+    genome_length   = 2000
 )
-plot_sample("A1", combined, anchor_position = 1000, window = 1000)
+plot_sample(combined, "A1", anchor_position = 1000, window = 1000)
+
+}
+\seealso{
+\code{\link[=plot_coverage_decay]{plot_coverage_decay()}}, \code{\link[=fit_decay_slopes]{fit_decay_slopes()}}.
 }

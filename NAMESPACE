@@ -44,7 +44,9 @@ importFrom(ggplot2,
   ggplot,
   labs,
   scale_color_brewer,
+  scale_color_manual,
   scale_fill_brewer,
+  scale_fill_manual,
   theme,
   theme_minimal
 )

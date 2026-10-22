@@ -7,6 +7,63 @@
 ## =========================================================================
 
 
+## Okabe-Ito colorblind-safe palette (Okabe & Ito 2008), the default for
+## categorical colors in every plot function.
+.okabe_ito <- c(
+    "#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442",
+    "#0072B2", "#D55E00", "#CC79A7"
+)
+
+## Palette names accepted by ggplot2's Brewer scales. Names in this set
+## keep routing through `scale_*_brewer()` for back-compatibility.
+.brewer_palette_names <- c(
+    "Blues", "BuGn", "BuPu", "GnBu", "Greens", "Greys", "Oranges", "OrRd",
+    "PuBu", "PuBuGn", "PuRd", "Purples", "RdPu", "Reds", "YlGn", "YlGnBu",
+    "YlOrBr", "YlOrRd",
+    "BrBG", "PiYG", "PRGn", "PuOr", "RdBu", "RdGy", "RdYlBu", "RdYlGn",
+    "Spectral",
+    "Accent", "Dark2", "Paired", "Pastel1", "Pastel2", "Set1", "Set2",
+    "Set3"
+)
+
+## Discrete color or fill scale for `n_levels` groups. A Brewer palette
+## name uses the Brewer scale; anything else uses the Okabe-Ito vector.
+## `drop = FALSE` keeps each group on its own palette position when a
+## plot shows only some of the levels (see `plot_sample()`).
+#' @importFrom ggplot2 scale_color_brewer scale_fill_brewer scale_color_manual scale_fill_manual
+#' @noRd
+.palette_scale <- function(palette, n_levels, aesthetic = c("color", "fill")) {
+    aesthetic <- match.arg(aesthetic)
+    if (!is.character(palette) || length(palette) != 1L || is.na(palette)) {
+        stop("`palette` must be a single character string.")
+    }
+    if (palette %in% .brewer_palette_names) {
+        return(if (aesthetic == "color") {
+            ggplot2::scale_color_brewer(palette = palette, drop = FALSE)
+        } else {
+            ggplot2::scale_fill_brewer(palette = palette, drop = FALSE)
+        })
+    }
+    if (palette != "okabe_ito") {
+        warning(sprintf(
+            "Unknown palette '%s'; using the Okabe-Ito palette.", palette
+        ))
+    }
+    if (n_levels > length(.okabe_ito)) {
+        stop(sprintf(
+            "The Okabe-Ito palette has %d colors but there are %d groups; ",
+            length(.okabe_ito), n_levels
+        ), "supply a Brewer palette name via `palette`.")
+    }
+    values <- .okabe_ito[seq_len(n_levels)]
+    if (aesthetic == "color") {
+        ggplot2::scale_color_manual(values = values, drop = FALSE)
+    } else {
+        ggplot2::scale_fill_manual(values = values, drop = FALSE)
+    }
+}
+
+
 #' Plot normalized coverage vs distance from anchor, colored by group
 #'
 #' Produces a ggplot showing each sample's per-bin normalized coverage
@@ -51,9 +108,11 @@
 #'   per-bin points on top of the group trends.
 #' @param loess_span Numeric in `(0, 1]`. Passed to `geom_smooth(span =
 #'   loess_span, method = "loess")`. Default 0.3.
-#' @param palette Character scalar. Name of a
-#'   `RColorBrewer`-compatible palette used to color groups. Default
-#'   `"Set1"`.
+#' @param palette Character scalar. `"okabe_ito"` (default) uses the
+#'   Okabe-Ito colorblind-safe palette, which has eight colors, so at
+#'   most eight groups. A Brewer palette name (e.g. `"Set1"`) uses
+#'   [ggplot2::scale_color_brewer()] instead. Any other string falls back
+#'   to Okabe-Ito with a warning.
 #'
 #' @return A `ggplot` object. Not printed automatically; call `print()`
 #'   or assign into a knitr code chunk, or save with
@@ -78,14 +137,14 @@
 #' )
 #' plot_coverage_decay(combined, anchor_position = 1000, window = 1000)
 #'
-#' @importFrom ggplot2 ggplot aes geom_point geom_smooth coord_cartesian scale_color_brewer labs theme_minimal theme element_text
+#' @importFrom ggplot2 ggplot aes geom_point geom_smooth coord_cartesian labs theme_minimal theme element_text
 #' @export
 plot_coverage_decay <- function(combined,
                                 anchor_position = NULL,
                                 window = NULL,
                                 show_points = TRUE,
                                 loess_span = 0.3,
-                                palette = "Set1") {
+                                palette = "okabe_ito") {
     if (!is.data.frame(combined)) {
         stop("`combined` must be a data.frame or tibble.")
     }
@@ -110,6 +169,7 @@ plot_coverage_decay <- function(combined,
     }
 
     combined$group <- factor(combined$group)
+    group_scale <- .palette_scale(palette, nlevels(combined$group))
 
     p <- ggplot2::ggplot(
         combined,
@@ -124,7 +184,7 @@ plot_coverage_decay <- function(combined,
             method = "loess", span = loess_span,
             se = TRUE, linewidth = 1.2, formula = y ~ x
         ) +
-        ggplot2::scale_color_brewer(palette = palette) +
+        group_scale +
         ggplot2::labs(
             title = "Normalized coverage vs distance from anchor",
             x = "Distance from anchor (bp)",
@@ -178,8 +238,10 @@ plot_coverage_decay <- function(combined,
 #' @param show_outliers Logical. If `TRUE`, boxplot outliers are drawn
 #'   as points. Default `FALSE` (avoids double-plotting when
 #'   `show_jitter = TRUE`).
-#' @param palette Character scalar. Name of a
-#'   `RColorBrewer`-compatible palette. Default `"Set1"`.
+#' @param palette Character scalar. `"okabe_ito"` (default) uses the
+#'   Okabe-Ito colorblind-safe palette (at most eight groups). A Brewer
+#'   palette name (e.g. `"Set1"`) uses [ggplot2::scale_fill_brewer()]
+#'   instead. Any other string falls back to Okabe-Ito with a warning.
 #'
 #' @return A `ggplot` object.
 #'
@@ -200,12 +262,12 @@ plot_coverage_decay <- function(combined,
 #' slopes <- fit_decay_slopes(fake, anchor_position = 0)
 #' plot_decay_slopes(slopes)
 #'
-#' @importFrom ggplot2 ggplot aes geom_boxplot geom_jitter scale_fill_brewer labs theme_minimal theme element_text
+#' @importFrom ggplot2 ggplot aes geom_boxplot geom_jitter labs theme_minimal theme element_text
 #' @export
 plot_decay_slopes <- function(slopes,
                             show_jitter = TRUE,
                             show_outliers = FALSE,
-                            palette = "Set1") {
+                            palette = "okabe_ito") {
     if (!is.data.frame(slopes)) {
         stop("`slopes` must be a data.frame or tibble.")
     }
@@ -218,6 +280,7 @@ plot_decay_slopes <- function(slopes,
         ))
     }
     slopes$group <- factor(slopes$group)
+    group_scale <- .palette_scale(palette, nlevels(slopes$group), "fill")
 
     outlier_shape <- if (isTRUE(show_outliers)) 19 else NA
     p <- ggplot2::ggplot(
@@ -225,7 +288,7 @@ plot_decay_slopes <- function(slopes,
         ggplot2::aes(x = group, y = slope, fill = group)
     ) +
         ggplot2::geom_boxplot(alpha = 0.65, outlier.shape = outlier_shape) +
-        ggplot2::scale_fill_brewer(palette = palette) +
+        group_scale +
         ggplot2::labs(
             title = "Distribution of coverage decay slopes",
             x = "Group",
@@ -262,7 +325,8 @@ plot_decay_slopes <- function(slopes,
 #'   [test_decay_significance()].
 #' @param bins Positive integer. Number of histogram bins. Default 40.
 #' @param observed_color Character scalar. Color of the vertical line
-#'   marking the observed F-statistic. Default `"#D7191C"` (red).
+#'   marking the observed F-statistic. Default `"#D55E00"` (Okabe-Ito
+#'   vermillion), which stays distinct from the grey histogram.
 #'
 #' @return A `ggplot` object.
 #'
@@ -288,7 +352,7 @@ plot_decay_slopes <- function(slopes,
 #' @export
 plot_null_distribution <- function(sig,
                                 bins = 40L,
-                                observed_color = "#D7191C") {
+                                observed_color = "#D55E00") {
     if (!inherits(sig, "decay_significance")) {
         stop("`sig` must be a `decay_significance` object from ",
             "test_decay_significance().")
@@ -322,75 +386,158 @@ plot_null_distribution <- function(sig,
         )
 }
 
-#' Plot coverage profile for a sample
+#' Plot coverage profile for a single sample
 #'
-#' @param sample Character. Sample name to filter and plot.
+#' Draws one sample's per-bin coverage against distance from the anchor,
+#' with a dashed dark grey least-squares line as a visual guide. This is a
+#' per-sample companion to [plot_coverage_decay()], useful for checking
+#' that the decay in an individual sample looks like what the group
+#' trend suggests.
+#'
+#' @details
+#'
+#' The fitted line is an ordinary least-squares fit of the plotted
+#' response on distance from the anchor, using all of the sample's bins.
+#' When `window` is supplied it only restricts the visible x-axis (via
+#' `coord_cartesian`); the fit still uses bins outside the window, as in
+#' [plot_coverage_decay()]. With `log_scale = TRUE` the response is the
+#' `log_norm_cov` column, the same quantity the formal tests model, so
+#' the line is the log-linear decay fit. With `log_scale = FALSE` the
+#' response is `norm_cov` and the line is a linear fit on the raw scale,
+#' which is not the model used for inference.
+#'
+#' The coverage line is colored by the sample's group, using the same
+#' palette positions as the other plot functions, so a group has the same
+#' color in every plot. The dashed fit line is always dark grey
+#' (`"#4a4a4a"`) so it stays visible against any group color.
+#'
+#' If `combined` already contains a `distance_from_anchor` column, it is
+#' used as-is and `anchor_position` is not evaluated. Otherwise
+#' `anchor_position` is required and distances are computed via
+#' [add_distance_from_anchor()].
+#'
 #' @param combined A data.frame or tibble from [load_all_samples()].
-#'   Must contain columns `sample`, `group`, `bin_mid`, and `norm_cov`.
+#'   Must contain columns `sample`, `group`, `bin_mid`, and `norm_cov`,
+#'   plus `log_norm_cov` when `log_scale = TRUE`.
+#' @param sample Character scalar. Name of the sample to plot. Must be
+#'   present in `combined$sample` and belong to a single group.
 #' @param anchor_position Non-negative numeric scalar. Reference
-#'   coordinate for distance calculation. Ignored if `combined`
-#'   already contains `distance_from_anchor`.
-#' @param window Numeric. Maximum x-axis value (distance from Anchor, bp).
-#' @param log_scale Logical. If TRUE, log-transform `norm_cov` and label axis accordingly. Default FALSE.
-#' @param palette Character scalar. Name of a
-#'   `RColorBrewer`-compatible palette. Default `"Set1"`.
+#'   coordinate for distance calculation. No default. Not needed when
+#'   `combined` already contains `distance_from_anchor`.
+#' @param window Optional positive numeric scalar. If supplied,
+#'   restricts the x-axis to `[0, window]`. Default `NULL` shows the
+#'   whole genome.
+#' @param log_scale Logical. If `TRUE` (default), plot `log_norm_cov`; if
+#'   `FALSE`, plot `norm_cov`.
+#' @param palette Character scalar. `"okabe_ito"` (default) uses the
+#'   Okabe-Ito colorblind-safe palette. A Brewer palette name (e.g.
+#'   `"Set1"`) uses [ggplot2::scale_color_brewer()] instead. Any other
+#'   string falls back to Okabe-Ito with a warning.
+#'
+#' @return A `ggplot` object.
+#'
+#' @seealso [plot_coverage_decay()], [fit_decay_slopes()].
 #'
 #' @examples
-#'
 #' extdata_dir <- system.file("extdata", package = "CovDecayAnalyzer")
-#'meta <- read.csv(
-#'  file.path(extdata_dir, "sample_metadata.csv"),
-#'  stringsAsFactors = FALSE
-#')
-#'meta$coverage_file <- breseq_coverage_paths(meta$sample, extdata_dir)
-#'combined <- load_all_samples(
-#'  sample_metadata = meta,
-#'  bin_size        = 100,
-#'  genome_length   = 2000
-#')
-#'plot_sample("A1", combined, anchor_position = 1000, window = 1000)
-#' @return A ggplot object showing the coverage decay profile with a log-linear fit line.
+#' meta <- read.csv(
+#'     file.path(extdata_dir, "sample_metadata.csv"),
+#'     stringsAsFactors = FALSE
+#' )
+#' meta$coverage_file <- breseq_coverage_paths(meta$sample, extdata_dir)
+#' combined <- load_all_samples(
+#'     sample_metadata = meta,
+#'     bin_size        = 100,
+#'     genome_length   = 2000
+#' )
+#' plot_sample(combined, "A1", anchor_position = 1000, window = 1000)
 #'
-#' @importFrom ggplot2 ggplot aes geom_line geom_smooth scale_fill_brewer labs theme_minimal theme element_text
+#' @importFrom ggplot2 ggplot aes geom_line geom_smooth coord_cartesian labs theme_minimal theme element_text
 #' @export
-plot_sample <- function(sample, combined, anchor_position, window, log_scale = F, palette = "Set1"){
-  if (!is.data.frame(combined)) {
-    stop("`combined` must be a data.frame or tibble.")
-  }
-  required <- c("sample", "group", "bin_mid", "norm_cov")
-  missing_cols <- setdiff(required, names(combined))
-  if (length(missing_cols) > 0L) {
-    stop(sprintf(
-      "`combined` is missing required column(s): %s",
-      paste(missing_cols, collapse = ", ")
-    ))
-  }
-  if (!"distance_from_anchor" %in% names(combined)) {
-    if (is.null(anchor_position)) {
-      stop("Provide `anchor_position` or a `distance_from_anchor` ",
-           "column in `combined`.")
+plot_sample <- function(combined,
+                        sample,
+                        anchor_position,
+                        window = NULL,
+                        log_scale = TRUE,
+                        palette = "okabe_ito") {
+    if (!is.data.frame(combined)) {
+        stop("`combined` must be a data.frame or tibble.")
     }
-    combined <- add_distance_from_anchor(combined, anchor_position)
-  }
+    if (!is.logical(log_scale) || length(log_scale) != 1L ||
+        is.na(log_scale)) {
+        stop("`log_scale` must be TRUE or FALSE.")
+    }
+    required <- c("sample", "group", "bin_mid", "norm_cov",
+        if (log_scale) "log_norm_cov")
+    missing_cols <- setdiff(required, names(combined))
+    if (length(missing_cols) > 0L) {
+        stop(sprintf(
+            "`combined` is missing required column(s): %s",
+            paste(missing_cols, collapse = ", ")
+        ))
+    }
+    if (!is.character(sample) || length(sample) != 1L || is.na(sample)) {
+        stop("`sample` must be a single character string.")
+    }
+    if (!sample %in% combined$sample) {
+        stop(sprintf("`sample` '%s' not found in `combined`.", sample))
+    }
+    if (!is.null(window) &&
+        (!is.numeric(window) || length(window) != 1L || window <= 0)) {
+        stop("`window` must be a single positive number.")
+    }
+    if (!"distance_from_anchor" %in% names(combined)) {
+        if (missing(anchor_position) || is.null(anchor_position)) {
+            stop("Provide `anchor_position` or a `distance_from_anchor` ",
+                "column in `combined`.")
+        }
+        combined <- add_distance_from_anchor(combined, anchor_position)
+    }
 
-  combined$group <- factor(combined$group)
-  sdat <- combined[combined$sample %in% sample,]
-  grp  <- unique(sdat$group)
+    ## Factor over the full table so the group keeps its palette position
+    ## from the other plots even though only one sample is drawn.
+    combined$group <- factor(combined$group)
+    sdat <- combined[combined$sample == sample, ]
+    grp <- unique(as.character(sdat$group))
+    if (length(grp) > 1L) {
+        stop(sprintf(
+            "`sample` '%s' belongs to multiple groups (%s); ",
+            sample, paste(grp, collapse = ", ")
+        ), "each sample must belong to exactly one group.")
+    }
 
-  y_lab <- if (log_scale) "Log Normalized Coverage" else "Normalized Coverage"
-  if(log_scale) sdat$norm_cov = log(sdat$norm_cov)
+    y_col <- if (log_scale) "log_norm_cov" else "norm_cov"
+    y_lab <- if (log_scale) "Log normalized coverage" else "Normalized coverage"
+    subtitle <- if (log_scale) {
+        "log-normalized coverage, log-linear fit shown"
+    } else {
+        "normalized coverage, linear fit shown"
+    }
 
-  ggplot2::ggplot(sdat, ggplot2::aes(x = bin_mid, y = norm_cov)) +
-    ggplot2::geom_line(linewidth = 0.8) +
-    ggplot2::geom_smooth(method = "lm", linetype = "dashed", se = FALSE) +
-    ggplot2::scale_fill_brewer(palette = palette) +
-    ggplot2::coord_cartesian(xlim = c(0, window)) +
-    ggplot2::labs(
-      title    = paste0("Coverage Profile: ", sample, " (", grp, ")"),
-      subtitle = "Red dashed line = log-linear fit",
-      x = "Distance from Anchor (bp)",
-      y = y_lab
+    p <- ggplot2::ggplot(
+        sdat,
+        ggplot2::aes(x = distance_from_anchor, y = .data[[y_col]],
+            color = group)
     ) +
-    ggplot2::theme_minimal(base_size = 14) +
-    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
+        ggplot2::geom_line(linewidth = 0.8) +
+        ggplot2::geom_smooth(
+            method = "lm", formula = y ~ x, linetype = "dashed", se = FALSE,
+            color = "#4a4a4a"
+        ) +
+        .palette_scale(palette, nlevels(combined$group)) +
+        ggplot2::labs(
+            title    = paste0("Coverage profile: ", sample, " (", grp, ")"),
+            subtitle = subtitle,
+            x        = "Distance from anchor (bp)",
+            y        = y_lab
+        ) +
+        ggplot2::theme_minimal(base_size = 14) +
+        ggplot2::theme(
+            plot.title      = ggplot2::element_text(face = "bold"),
+            legend.position = "none"
+        )
+    if (!is.null(window)) {
+        p <- p + ggplot2::coord_cartesian(xlim = c(0, window))
+    }
+    p
 }

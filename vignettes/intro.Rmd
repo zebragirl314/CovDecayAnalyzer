@@ -257,6 +257,33 @@ is what the formal LMM in the next section preserves. Look at this
 plot to spot outlier samples and to confirm the direction and rough
 magnitude of the effect; use the LMM for inference.
 
+# Inspecting a single sample
+
+`plot_sample()` shows one sample's coverage profile on its own, with a
+dashed dark grey least-squares line as a visual guide. With the default
+`log_scale = TRUE` the line is the log-linear decay fit, on the same
+`log_norm_cov` response that the formal test models.
+
+```{r plot-sample}
+plot_sample(combined, "A1", anchor_position = 1000, window = 1000)
+```
+
+Setting `log_scale = FALSE` shows the normalized coverage itself, where
+the decay curves and the straight line is only a rough guide:
+
+```{r plot-sample-raw}
+plot_sample(
+    combined, "A1",
+    anchor_position = 1000,
+    window          = 1000,
+    log_scale       = FALSE
+)
+```
+
+This view is for checking that the decay in an individual sample looks
+like what the group trend suggests. It does not give any inference; that
+comes in the next section.
+
 # Formal group comparison
 
 `test_decay_slopes()` fits a linear mixed-effects model to all bins
