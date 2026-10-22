@@ -42,6 +42,10 @@
 #' 3. Refits the LMM and extracts the Kenward-Roger F-statistic for the
 #'    `distance_from_anchor:group` interaction.
 #'
+#' If `n_random` exceeds the number of distinct integer positions
+#' available (the genome length, minus any excluded region), all
+#' available positions are used and a warning reports both numbers.
+#'
 #' Failed fits (singular models, non-converging optimizers) are dropped
 #' silently. The returned vector length may therefore be smaller than
 #' `n_random`; the actual retention rate is a useful diagnostic and is
@@ -84,7 +88,9 @@
 #' @return A numeric vector of length at most `n_random` containing
 #'   the Kenward-Roger F-statistics from successful fits at the
 #'   sampled random anchor positions. Non-finite values from failed
-#'   fits are removed.
+#'   fits are removed. The vector is also shorter than `n_random`, with
+#'   a warning, when fewer than `n_random` anchor positions are
+#'   available.
 #'
 #' @references
 #' Phipson B, Smyth GK (2010). Permutation p-values should never be
@@ -141,22 +147,24 @@ null_distribution_F <- function(combined,
         set.seed(as.integer(seed))
     }
 
-    ## Sample positions, avoiding the excluded region if requested.
-    candidate <- sample.int(genome_length, size = n_random, replace = FALSE)
+    ## Sample positions without replacement from the allowed pool, which
+    ## is the whole genome minus the excluded region if requested.
+    allowed <- seq_len(genome_length)
     if (!is.null(exclude)) {
-        candidate <- candidate[
-            candidate < exclude[1] | candidate > exclude[2]
-        ]
-        ## Top up if we removed too many.
-        while (length(candidate) < n_random) {
-            extra <- sample.int(genome_length,
-                size = n_random - length(candidate), replace = FALSE)
-            extra <- extra[extra < exclude[1] | extra > exclude[2]]
-            candidate <- unique(c(candidate, extra))
-            if (length(candidate) >= n_random) break
-        }
-        candidate <- candidate[seq_len(min(n_random, length(candidate)))]
+        # logical filter rather than setdiff(seq()); handles non-integer exclude bounds
+        allowed <- allowed[allowed < exclude[1] | allowed > exclude[2]]
     }
+    n_draw <- min(n_random, length(allowed))
+    if (n_draw < n_random) {
+        warning(sprintf(
+            paste0("Requested n_random = %d but only %d allowed anchor ",
+                "positions are available; using %d."),
+            as.integer(n_random), length(allowed), n_draw
+        ))
+    }
+    ## Index into `allowed` rather than calling sample() on it directly,
+    ## which would treat a length-one pool as 1:allowed.
+    candidate <- allowed[sample.int(length(allowed), size = n_draw)]
 
     F_list <- BiocParallel::bplapply(
         candidate,

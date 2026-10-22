@@ -53,7 +53,9 @@ Use \link[BiocParallel:MulticoreParam]{BiocParallel::MulticoreParam} on Unix-lik
 A numeric vector of length at most \code{n_random} containing
 the Kenward-Roger F-statistics from successful fits at the
 sampled random anchor positions. Non-finite values from failed
-fits are removed.
+fits are removed. The vector is also shorter than \code{n_random}, with
+a warning, when fewer than \code{n_random} anchor positions are
+available.
 }
 \description{
 Repeatedly refits the linear mixed model of \code{\link[=test_decay_slopes]{test_decay_slopes()}} at
@@ -81,6 +83,10 @@ that random position.
 \item Refits the LMM and extracts the Kenward-Roger F-statistic for the
 \code{distance_from_anchor:group} interaction.
 }
+
+If \code{n_random} exceeds the number of distinct integer positions
+available (the genome length, minus any excluded region), all
+available positions are used and a warning reports both numbers.
 
 Failed fits (singular models, non-converging optimizers) are dropped
 silently. The returned vector length may therefore be smaller than

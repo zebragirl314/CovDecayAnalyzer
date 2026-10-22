@@ -1,3 +1,10 @@
+# CovDecayAnalyzer (development version, pre-0.1.0)
+
+* `null_distribution_F()` now returns a truncated vector with a warning when
+  `n_random` exceeds the number of allowed anchor positions, replacing both an
+  infinite loop (with `exclude`) and the cryptic base-R sampling error
+  (`n_random > genome_length`).
+
 # CovDecayAnalyzer 0.1.0
 
 Initial development release. Full end-to-end workflow now available in

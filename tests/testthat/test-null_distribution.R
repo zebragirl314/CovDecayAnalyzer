@@ -56,3 +56,85 @@ test_that("null_distribution_F returns a numeric vector under simulated data", {
     expect_lte(length(null_F), 5L)
     expect_true(all(is.finite(null_F)))
 })
+
+
+## Anchor-position sampling. null_distribution_F returns only F values, so
+## these tests check the number of fits retained and that warnings fire (or
+## do not) as appropriate. Small data keeps each refit cheap.
+.make_fake_null_combined <- function(n_samples = 8L, n_bins = 20L,
+                                     bin_width = 100) {
+    set.seed(1)
+    do.call(rbind, lapply(seq_len(n_samples), function(i) {
+        tibble::tibble(
+            sample = paste0("s", i),
+            group = if (i <= n_samples / 2) "g1" else "g2",
+            bin_mid = seq(bin_width / 2, by = bin_width,
+                length.out = n_bins),
+            log_norm_cov = rnorm(n_bins, sd = 0.2)
+        )
+    }))
+}
+
+
+test_that("null_distribution_F truncates with a warning when exclude leaves too few positions", {
+    fake <- .make_fake_null_combined()
+    ## exclude = c(1, 1900) leaves positions 1901..2000, i.e. 100 of them.
+    expect_warning(
+        res <- null_distribution_F(
+            fake, genome_length = 2000L, n_random = 200L,
+            exclude = c(1, 1900), seed = 1
+        ),
+        "200.*100"
+    )
+    expect_type(res, "double")
+    expect_lte(length(res), 100L)
+})
+
+
+test_that("null_distribution_F truncates with a warning when n_random exceeds genome_length", {
+    fake <- .make_fake_null_combined()
+    expect_warning(
+        res <- null_distribution_F(
+            fake, genome_length = 100L, n_random = 500L, seed = 1
+        ),
+        "500.*100"
+    )
+    expect_type(res, "double")
+    expect_lte(length(res), 100L)
+    ## Every position is used, so nearly all fits should be retained.
+    expect_gt(length(res), 0L)
+})
+
+
+test_that("null_distribution_F returns n_random fits with no warning in the normal case", {
+    fake <- .make_fake_null_combined()
+    expect_no_warning(
+        res <- null_distribution_F(
+            fake, genome_length = 2000L, n_random = 10L, seed = 1
+        )
+    )
+    expect_length(res, 10L)
+
+    expect_no_warning(
+        res_ex <- null_distribution_F(
+            fake, genome_length = 2000L, n_random = 10L,
+            exclude = c(500, 1500), seed = 1
+        )
+    )
+    expect_length(res_ex, 10L)
+})
+
+
+test_that("null_distribution_F is reproducible under a fixed seed", {
+    fake <- .make_fake_null_combined()
+    run <- function(seed, exclude = NULL) {
+        null_distribution_F(
+            fake, genome_length = 2000L, n_random = 8L,
+            exclude = exclude, seed = seed
+        )
+    }
+    expect_equal(run(7), run(7))
+    expect_equal(run(7, c(500, 1500)), run(7, c(500, 1500)))
+    ## Different seeds should sample different anchors, hence different F.
+    expect_false(isTRUE(all.equal(run(7), run(8))))
+})
