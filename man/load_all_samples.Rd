@@ -35,7 +35,7 @@ base pairs.}
 \code{1e-5}.}
 
 \item{BPPARAM}{A \code{BiocParallel::BiocParallelParam} instance
-controlling parallelism. Default \code{\link[BiocParallel:SerialParam-class]{BiocParallel::SerialParam()}}.}
+controlling parallelism. Default \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}}.}
 }
 \value{
 A tibble with one row per (sample, bin), columns from
@@ -72,9 +72,9 @@ required columns are skipped with a warning rather than aborting
 the whole load.
 
 Parallel processing is delegated to \code{\link[BiocParallel:bplapply]{BiocParallel::bplapply()}}. The
-default \code{\link[BiocParallel:SerialParam-class]{BiocParallel::SerialParam()}} processes samples
+default \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}} processes samples
 sequentially. To use multiple cores, pass a
-\link[BiocParallel:MulticoreParam-class]{BiocParallel::MulticoreParam} or \link[BiocParallel:SnowParam-class]{BiocParallel::SnowParam} instance.
+\link[BiocParallel:MulticoreParam]{BiocParallel::MulticoreParam} or \link[BiocParallel:SnowParam]{BiocParallel::SnowParam} instance.
 }
 \examples{
 ## Example 1: breseq output in standard layout, using the shipped

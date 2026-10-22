@@ -43,7 +43,7 @@ between random-anchor windows and the observed-anchor window.}
 the sampled random anchor positions.}
 
 \item{BPPARAM}{A \code{BiocParallel::BiocParallelParam} instance
-controlling parallelism. Default \code{\link[BiocParallel:SerialParam-class]{BiocParallel::SerialParam()}}.}
+controlling parallelism. Default \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}}.}
 }
 \value{
 An S3 object of class \code{"decay_significance"}, a named list

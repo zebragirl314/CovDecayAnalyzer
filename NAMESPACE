@@ -18,38 +18,48 @@ export(plot_sample)
 export(read_coverage_tab)
 export(test_decay_significance)
 export(test_decay_slopes)
-importFrom(BiocParallel,SerialParam)
-importFrom(BiocParallel,bplapply)
-importFrom(data.table,':=')
-importFrom(data.table,as.data.table)
-importFrom(data.table,data.table)
-importFrom(data.table,fread)
-importFrom(data.table,rbindlist)
+importFrom(BiocParallel,
+  SerialParam,
+  bplapply
+)
+importFrom(data.table,
+  ":=",
+  as.data.table,
+  data.table,
+  fread,
+  rbindlist
+)
 importFrom(emmeans,emtrends)
-importFrom(ggplot2,aes)
-importFrom(ggplot2,coord_cartesian)
-importFrom(ggplot2,element_text)
-importFrom(ggplot2,geom_boxplot)
-importFrom(ggplot2,geom_histogram)
-importFrom(ggplot2,geom_jitter)
-importFrom(ggplot2,geom_line)
-importFrom(ggplot2,geom_point)
-importFrom(ggplot2,geom_smooth)
-importFrom(ggplot2,geom_vline)
-importFrom(ggplot2,ggplot)
-importFrom(ggplot2,labs)
-importFrom(ggplot2,scale_color_brewer)
-importFrom(ggplot2,scale_fill_brewer)
-importFrom(ggplot2,theme)
-importFrom(ggplot2,theme_minimal)
+importFrom(ggplot2,
+  aes,
+  coord_cartesian,
+  element_text,
+  geom_boxplot,
+  geom_histogram,
+  geom_jitter,
+  geom_line,
+  geom_point,
+  geom_smooth,
+  geom_vline,
+  ggplot,
+  labs,
+  scale_color_brewer,
+  scale_fill_brewer,
+  theme,
+  theme_minimal
+)
 importFrom(graphics,pairs)
 importFrom(lme4,lmerControl)
 importFrom(lmerTest,lmer)
-importFrom(stats,anova)
-importFrom(stats,coef)
-importFrom(stats,lm)
-importFrom(stats,median)
-importFrom(stats,vcov)
-importFrom(tibble,as_tibble)
-importFrom(tibble,tibble)
+importFrom(stats,
+  anova,
+  coef,
+  lm,
+  median,
+  vcov
+)
+importFrom(tibble,
+  as_tibble,
+  tibble
+)
 importFrom(utils,globalVariables)
