@@ -65,12 +65,12 @@ sens_s2_dropout <- function(cov, sc) {
 
 #' S3. Heteroscedasticity across groups.
 #'
-#' Group-specific random-slope SD (`tau_g = cv * s_g`) and/or a residual SD
+#' Group-specific random-slope CV (`cv_g`) and/or a residual SD
 #' ratio between groups.
 #'
 #' @param samples Tibble of per-sample truth with `group` and `s_ref_g`.
 #' @param sc A `cda_scenario`; `sc$sens$S3` holds `cv` and `sigma_ratio`.
-#' @return `samples` with columns `tau_i` and `sigma_i` (per-sample SDs).
+#' @return `samples` with columns `cv_i` (relative slope SD) and `sigma_i`.
 sens_s3_scales <- function(samples, sc) {
     .not_implemented("S3")
 }

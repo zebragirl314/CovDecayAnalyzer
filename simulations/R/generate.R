@@ -8,11 +8,12 @@
 ##
 ## Baseline model, sample i in group g(i), atom a at midpoint x_a:
 ##   mean_cov_ia = D_i * exp(-s_i * |x_a - anchor| + e_ia)
-##   s_i  = s_ref + Delta_g(i) + u_i,  u_i ~ N(0, tau^2)
+##   s_i  = s_ref * (1 + Delta_std * treated_g(i) + u_i),  u_i ~ N(0, cv^2)
+##          (s_ref is a scale parameter; tau = s_ref * cv, Delta = s_ref * Delta_std)
 ##   D_i  ~ LogNormal(log depth_median, depth_sd_log^2)
 ##   e_ia ~ N(0, sigma_atom^2), independent
 ## Group pattern (Q9): one group (the last) has s_ref + Delta; the rest
-## share s_ref.
+## share s_ref (treated = 1 for the last group only).
 ## =========================================================================
 
 ## 1 kb atom grid for a genome of length L. The last atom is truncated at L.
@@ -43,20 +44,21 @@ bin_geometry <- function(L, bin_size, atom_size = ATOM_SIZE) {
     group <- factor(rep(paste0("g", seq_len(sc$G)), times = npg),
         levels = paste0("g", seq_len(sc$G)))
     N <- length(group)
-    delta <- group_deltas(sc$G, sc$Delta)[as.integer(group)]
+    treated <- group_deltas(sc$G, 1)[as.integer(group)]
+    delta <- sc$s_ref * sc$Delta_std * treated
     sample <- paste0(group, "_s", ave(seq_len(N), group, FUN = seq_along))
     samples <- tibble::tibble(
         sample = sample, group = group, delta = delta,
-        tau_i = rep(sc$tau, N), sigma_i = rep(sc$sigma_atom, N))
+        cv_i = rep(sc$cv, N), sigma_i = rep(sc$sigma_atom, N))
     if (sens_active(sc, "S3")) {
-        samples$s_group <- sc$s_ref + delta
+        samples$s_group <- sc$s_ref * (1 + sc$Delta_std * treated)
         samples <- sens_s3_scales(samples, sc)
     }
-    u <- stats::rnorm(N) * samples$tau_i
+    u <- stats::rnorm(N) * samples$cv_i  # relative slope deviation
     D <- stats::rlnorm(N, meanlog = log(sc$depth_median),
         sdlog = sc$depth_sd_log)
     samples$u_i <- u
-    samples$s_i <- sc$s_ref + delta + u
+    samples$s_i <- sc$s_ref * (1 + sc$Delta_std * treated + u)
     samples$D <- D
     samples
 }

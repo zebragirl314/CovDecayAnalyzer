@@ -18,8 +18,8 @@ scenario_defaults <- function() {
         anchor_frac  = 0.5,
         n            = 5L,        # samples per group; scalar or length G
         G            = 2L,
-        Delta        = 0,
-        tau          = 2e-6,
+        Delta_std    = 0,         # relative effect: treated slope = s_ref * (1 + Delta_std)
+        cv           = 1 / 3,     # slope CV: between-sample SD = s_ref * cv
         sigma_atom   = 0.15,
         depth_median = 200,
         depth_sd_log = 0.4,
@@ -29,11 +29,19 @@ scenario_defaults <- function() {
 }
 
 ## Fields that define the data-generating process (and so the scenario ID).
-.scenario_id_fields <- c("L", "s_ref", "anchor_frac", "n", "G", "Delta",
-    "tau", "sigma_atom", "depth_median", "depth_sd_log", "atom_size")
+.scenario_id_fields <- c("L", "s_ref", "anchor_frac", "n", "G", "Delta_std",
+    "cv", "sigma_atom", "depth_median", "depth_sd_log", "atom_size")
 
 make_scenario <- function(..., bin_size = 5000L) {
-    sc <- utils::modifyList(scenario_defaults(), list(...))
+    args <- list(...)
+    sc <- utils::modifyList(scenario_defaults(), args)
+    ## s_ref is a scale parameter (PLAN.md 2.2): slopes are s_ref * (1 + ...).
+    ## Legacy absolute inputs (per bp) are converted: Delta_std = Delta / s_ref,
+    ## cv = tau / s_ref. Absolute `Delta` and `tau` are derived fields.
+    if (!is.null(args$Delta)) sc$Delta_std <- args$Delta / sc$s_ref
+    if (!is.null(args$tau)) sc$cv <- args$tau / sc$s_ref
+    sc$Delta <- sc$s_ref * sc$Delta_std
+    sc$tau <- sc$s_ref * sc$cv
     sc$G <- as.integer(sc$G)
     sc$n <- as.integer(sc$n)
     if (!length(sc$n) %in% c(1L, sc$G)) {
@@ -133,6 +141,8 @@ scenario_to_row <- function(sc) {
         anchor_frac  = sc$anchor_frac,
         n            = sc$n[1L],
         G            = sc$G,
+        Delta_std    = sc$Delta_std,
+        cv           = sc$cv,
         Delta        = sc$Delta,
         tau          = sc$tau,
         sigma_atom   = sc$sigma_atom,
@@ -140,7 +150,7 @@ scenario_to_row <- function(sc) {
         depth_sd_log = sc$depth_sd_log,
         bin_size     = sc$bin_size,
         tau_eff      = tau_eff(sc),
-        delta_std    = sc$Delta / tau_eff(sc)
+        delta_std    = sc$Delta / tau_eff(sc)  # Delta / tau_eff, not Delta_std
     )
 }
 

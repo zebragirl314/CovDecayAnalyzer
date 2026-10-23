@@ -120,7 +120,7 @@ For sample `i` in group `g(i)`, atom `a` at midpoint `x_a`, with true anchor
 ```
 mean_cov_ia = D_i * exp( c_i - s_i * |x_a - a*| + e_ia )
 
-s_i  = s_ref + Delta_{g(i)} + u_i,     u_i ~ N(0, tau^2)       (between-sample slope variation)
+s_i  = s_ref * (1 + Delta_std * I[g(i) = treated] + u_i),  u_i ~ N(0, cv^2)   (between-sample slope variation)
 D_i  ~ LogNormal(log 200, 0.4^2)                              (depth; removed by normalization)
 c_i  = 0                                                      (see below)
 e_ia ~ N(0, sigma_atom^2), independent across atoms and samples (within-sample noise)
@@ -144,12 +144,23 @@ e_ia ~ N(0, sigma_atom^2), independent across atoms and samples (within-sample n
   switched on only in the low-depth sensitivity (`D` median 10). One
   validation figure (appendix) compares log-normal atoms against a per-base
   negative-binomial generator at three depths to justify the approximation.
+- **`s_ref` is a scale parameter (adopted after A2-1).** Slopes are
+  `s_i = s_ref * (1 + Delta_std * treated + u_i)` with `u_i ~ N(0, cv^2)`, so
+  `tau = s_ref * cv` and `Delta = s_ref * Delta_std` are derived, and
+  `Delta_std` (relative effect) and `cv` (slope coefficient of variation) are
+  the generative inputs. Changing `s_ref` rescales every slope-scale quantity
+  together, instead of leaving `tau` and `Delta` fixed in per-bp units. In the
+  pre-reparameterization generator `tau_eff` did not depend on `s_ref`; now it
+  does (2.5). Reference values: `s_ref = 6e-6`, `cv = 1/3` (`tau = 2e-6`).
+  `Delta_std` below replaces `Delta / s_ref`; the older `Delta / tau_eff` in
+  2.5 and 4 is a different quantity and keeps its name `delta_std` in result
+  files as `Delta / tau_eff`.
 - **Group effect (one group differs).** `Delta_g` shifts the group's mean
   decay rate; group 1 is the reference. Effect size `Delta` is the difference
   between the one differing group and the shared reference rate. Exact
-  parameterization (Q9): `G = 2`: groups have `s_ref` and `s_ref + Delta`.
-  `G = 3`: two groups have `s_ref`, one has `s_ref + Delta`. `G = 4`: three
-  groups have `s_ref`, one has `s_ref + Delta`. The differing group is the
+  parameterization (Q9): `G = 2`: groups have slopes scaled by 1 and `1 + Delta_std`.
+  `G = 3`: two groups have scale 1, one has `1 + Delta_std`. `G = 4`: three
+  groups have scale 1, one has `1 + Delta_std`. The differing group is the
   last one (`g = G`). Equal spacing is not used. Because the omnibus F has `G
   - 1` numerator df, a single differing group is diluted as `G` grows; power
   falling with `G` at fixed `Delta` is expected, not a defect. The same
@@ -236,7 +247,7 @@ users' pilot estimates can be mapped onto the surface (2.5).
 ### 2.5 What the generator implies for the grid (a hypothesis to test early)
 
 The F statistic compares group slope differences against the variance of a
-sample-level slope, approximately `tau^2 + sigma_bin^2 / Sxx`, where
+sample-level slope, approximately `tau^2 + sigma_bin^2 / Sxx` with `tau = s_ref * cv`, where
 `Sxx = sum_j (d_j - dbar)^2` over a sample's bins. If that is right, then
 `sigma`, bin size, genome length and anchor position matter for power
 *only through* this one effective between-sample slope variance, and power
@@ -314,7 +325,7 @@ viruses with localized replication origins.
 |---|---|---|
 | Samples per group `n` | 2, 3, 4, 5, 6, 8, 10 (Tier 1 subset: 2, 3, 5, 10) | Balanced groups in the main grid. Unbalanced designs (2 vs 5; 3 vs 8, `G = 2`) are a sensitivity family. |
 | Number of groups `G` | 2, 3, 4 | One-differs pattern (2.2). |
-| Effect size `Delta` (per bp) | 0, 1e-6, 2e-6, 3e-6, 4.5e-6, 6e-6 | Difference between the differing group and the reference rate. |
+| Relative effect `Delta_std` | 0, 1/6, 1/3, 1/2, 3/4, 1 | Treated slope is `s_ref * (1 + Delta_std)`. At `s_ref = 6e-6` these are `Delta` = 0, 1, 2, 3, 4.5, 6e-6 per bp, the earlier absolute grid. |
 
 **Geometry axes** (promoted to primary; treated as nuisance variables for
 sensitivity mapping, not crossed with the design axes):
@@ -336,10 +347,10 @@ size):
 
 | Axis | Values (reference in bold) | Notes |
 |---|---|---|
-| Between-sample slope SD `tau` | 1e-6, **2e-6**, 4e-6 | Governs power through `Delta / tau_eff` (2.5). |
+| Slope CV `cv` (between-sample SD = `s_ref * cv`) | 1/6, **1/3**, 2/3 | Equals `tau` = 1e-6, 2e-6, 4e-6 at `s_ref = 6e-6`. Governs power through `Delta / tau_eff` (2.5). |
 | Atom-level residual SD `sigma_atom` | 0.05, **0.15**, 0.30, 0.50 | At 1 kb atoms; SD at 5 kb bins is `sigma_atom / sqrt(5)` for independent noise. Realized `sigma(fit)` is stored. |
 
-Interpretation of `Delta` at the reference (`s_ref = 6e-6`, `tau = 2e-6`):
+Interpretation of `Delta = s_ref * Delta_std` at the reference (`s_ref = 6e-6`, `cv = 1/3`, `tau = 2e-6`):
 
 | `Delta` (per bp) | `Delta / tau` | Extra coverage ratio across 100 kb | Reads as |
 |---|---|---|---|
@@ -350,7 +361,7 @@ Interpretation of `Delta` at the reference (`s_ref = 6e-6`, `tau = 2e-6`):
 | 4.5e-6 | 2.25 | 1.57 | clear |
 | 6e-6 | 3.0 | 1.82 | obvious (twice the reference rate) |
 
-Absolute `Delta`, `Delta / tau`, and the realized `Delta / tau_eff` are all
+`Delta_std`, absolute `Delta`, `Delta / tau`, and the realized `Delta / tau_eff` are all
 recorded per scenario, because the surface (C5) is probably indexed by the
 last (2.5).
 
@@ -404,7 +415,9 @@ built to test that prediction and then use it, rather than assume it:
   against the same model with the geometry covariates added. If geometry
   covariates improve held-out error materially, the calculator takes more
   inputs and the plan says so; the grid is not widened beforehand.
-- **Nuisance sweeps** for `tau` and `sigma_atom` are one-at-a-time at the
+- **Note on 4.3.** The A2-2 prep prompt cites section 4.3; this plan has
+  only 4.1 and 4.2, and the grid text was updated there.
+- **Nuisance sweeps** for `cv` (formerly `tau`) and `sigma_atom` are one-at-a-time at the
   reference geometry, `n` in {3, 5}, `G = 2`.
 
 Tiers:
