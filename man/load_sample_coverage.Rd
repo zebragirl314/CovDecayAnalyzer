@@ -49,21 +49,7 @@ takes a metadata table with a \code{coverage_file} column and iterates
 this function under the hood with error tolerance and optional
 parallelism.
 }
-\examples{
-cov_file <- system.file(
-    "extdata", "A1", "08_mutation_identification",
-    "Exported.coverage.tab",
-    package = "CovDecayAnalyzer"
-)
-out <- load_sample_coverage(
-    path          = cov_file,
-    sample_name   = "A1",
-    bin_size      = 100,
-    genome_length = 2000
-)
-head(out)
-
-}
 \seealso{
 \code{\link[=load_all_samples]{load_all_samples()}} for multi-sample loading.
 }
+\keyword{internal}

@@ -191,7 +191,7 @@
 #' }
 #'
 #' @importFrom lmerTest lmer
-#' @importFrom lme4 lmerControl
+#' @importFrom lme4 lmerControl isSingular
 #' @importFrom stats anova
 #' @importFrom emmeans emtrends
 #' @importFrom graphics pairs
@@ -294,7 +294,7 @@ test_decay_slopes <- function(combined,
 
     ## Fit diagnostics. check.conv.* are set to "ignore" above so lme4
     ## does not warn; report the outcome here instead.
-    singular  <- lme4::isSingular(fit)
+    singular  <- isSingular(fit)
     conv_opt  <- fit@optinfo$conv$opt
     conv_code <- if (is.null(conv_opt)) NULL else as.integer(conv_opt)
 

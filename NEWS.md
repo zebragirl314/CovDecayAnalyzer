@@ -1,5 +1,13 @@
 # CovDecayAnalyzer (development version, pre-0.1.0)
 
+* Breaking: `read_coverage_tab()`, `bin_coverage()`, `normalize_coverage()`
+  and `load_sample_coverage()` are no longer exported. They are pipeline
+  internals reached through `load_all_samples()`; call them with
+  `CovDecayAnalyzer:::name()` if needed. Their help pages remain (marked
+  internal), but their examples were removed.
+* Cleanup: `.Rbuildignore` now excludes non-package top-level files and
+  directories from the build.
+* Cleanup: stale `viral_rpm` reference removed from `globalVariables`.
 * Breaking: `plot_sample()` argument order is now
   `plot_sample(combined, sample, ...)` for consistency with the other
   functions. `anchor_position` has no default, `window` defaults to `NULL`

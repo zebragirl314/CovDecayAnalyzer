@@ -90,5 +90,5 @@ globalVariables(c(
     "position", "redundant_bot_cov", "redundant_top_cov",
     "sample", "slope", "se_slope", "term", "total_cov",
     "unique_bot_cov", "unique_top_cov",
-    "F_stat", "p_value", "null_F", "viral_rpm"
+    "F_stat", "p_value", "null_F"
 ))

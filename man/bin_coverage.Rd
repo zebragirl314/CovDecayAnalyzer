@@ -44,15 +44,7 @@ means. Larger bins are smoother but may average across distinct
 local features. The default of 1000 bp works well for HCMV-sized
 genomes (~238 kb) and gives approximately 238 bins per sample.
 }
-\examples{
-set.seed(1)
-cov <- data.table::data.table(
-    position  = 1:5000,
-    total_cov = rpois(5000, lambda = 30)
-)
-bin_coverage(cov, bin_size = 1000, genome_length = 5000)
-
-}
 \seealso{
 \code{\link[=normalize_coverage]{normalize_coverage()}}, \code{\link[=load_sample_coverage]{load_sample_coverage()}}.
 }
+\keyword{internal}

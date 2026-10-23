@@ -56,19 +56,8 @@
 #' [breseq_coverage_paths()] for building file paths when working with
 #' breseq output.
 #'
-#' @examples
-#' ## Read one of the four simulated samples shipped with the package.
-#' cov_file <- system.file(
-#'     "extdata", "A1", "08_mutation_identification",
-#'     "Exported.coverage.tab",
-#'     package = "CovDecayAnalyzer"
-#' )
-#' cov <- read_coverage_tab(cov_file)
-#' head(cov)
-#' summary(cov$total_cov)
-#'
 #' @importFrom data.table fread ':='
-#' @export
+#' @keywords internal
 read_coverage_tab <- function(path) {
     if (!is.character(path) || length(path) != 1L || is.na(path)) {
         stop("`path` must be a single non-NA character string.")
@@ -136,16 +125,8 @@ read_coverage_tab <- function(path) {
 #'
 #' @seealso [normalize_coverage()], [load_sample_coverage()].
 #'
-#' @examples
-#' set.seed(1)
-#' cov <- data.table::data.table(
-#'     position  = 1:5000,
-#'     total_cov = rpois(5000, lambda = 30)
-#' )
-#' bin_coverage(cov, bin_size = 1000, genome_length = 5000)
-#'
 #' @importFrom data.table data.table ':='
-#' @export
+#' @keywords internal
 bin_coverage <- function(cov, bin_size = 1000L, genome_length) {
     .validate_positive_integer(bin_size, "bin_size")
     .validate_positive_integer(genome_length, "genome_length")
@@ -205,20 +186,9 @@ bin_coverage <- function(cov, bin_size = 1000L, genome_length) {
 #'
 #' @seealso [bin_coverage()], [load_sample_coverage()].
 #'
-#' @examples
-#' set.seed(1)
-#' binned <- data.table::data.table(
-#'     bin       = 1:20,
-#'     mean_cov  = rpois(20, lambda = 30),
-#'     bin_start = seq(1, by = 1000, length.out = 20),
-#'     bin_end   = seq(1000, by = 1000, length.out = 20),
-#'     bin_mid   = seq(500.5, by = 1000, length.out = 20)
-#' )
-#' normalize_coverage(binned)
-#'
 #' @importFrom data.table ':='
 #' @importFrom stats median
-#' @export
+#' @keywords internal
 normalize_coverage <- function(binned, epsilon = 1e-5) {
     if (!inherits(binned, "data.table")) {
         stop("`binned` must be a data.table (e.g. from bin_coverage()).")
@@ -281,23 +251,9 @@ normalize_coverage <- function(binned, epsilon = 1e-5) {
 #'
 #' @seealso [load_all_samples()] for multi-sample loading.
 #'
-#' @examples
-#' cov_file <- system.file(
-#'     "extdata", "A1", "08_mutation_identification",
-#'     "Exported.coverage.tab",
-#'     package = "CovDecayAnalyzer"
-#' )
-#' out <- load_sample_coverage(
-#'     path          = cov_file,
-#'     sample_name   = "A1",
-#'     bin_size      = 100,
-#'     genome_length = 2000
-#' )
-#' head(out)
-#'
 #' @importFrom data.table ':='
 #' @importFrom tibble as_tibble
-#' @export
+#' @keywords internal
 load_sample_coverage <- function(path,
                                 sample_name,
                                 bin_size = 1000L,

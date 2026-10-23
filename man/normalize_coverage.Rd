@@ -42,18 +42,7 @@ If the sample's median coverage is zero (essentially no reads
 recovered), \code{norm_cov} and \code{log_norm_cov} are set to \code{NA_real_} and
 a warning is issued.
 }
-\examples{
-set.seed(1)
-binned <- data.table::data.table(
-    bin       = 1:20,
-    mean_cov  = rpois(20, lambda = 30),
-    bin_start = seq(1, by = 1000, length.out = 20),
-    bin_end   = seq(1000, by = 1000, length.out = 20),
-    bin_mid   = seq(500.5, by = 1000, length.out = 20)
-)
-normalize_coverage(binned)
-
-}
 \seealso{
 \code{\link[=bin_coverage]{bin_coverage()}}, \code{\link[=load_sample_coverage]{load_sample_coverage()}}.
 }
+\keyword{internal}

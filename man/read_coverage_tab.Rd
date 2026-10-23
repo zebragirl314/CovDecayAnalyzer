@@ -38,18 +38,6 @@ or via a shim that renames columns before writing to disk.
 Total coverage is computed as
 \code{unique_top_cov + unique_bot_cov + redundant_top_cov + redundant_bot_cov}.
 }
-\examples{
-## Read one of the four simulated samples shipped with the package.
-cov_file <- system.file(
-    "extdata", "A1", "08_mutation_identification",
-    "Exported.coverage.tab",
-    package = "CovDecayAnalyzer"
-)
-cov <- read_coverage_tab(cov_file)
-head(cov)
-summary(cov$total_cov)
-
-}
 \references{
 Deatherage DE, Barrick JE (2014). Identification of mutations in
 laboratory-evolved microbes from next-generation sequencing data
@@ -63,3 +51,4 @@ bin, and normalize together;
 \code{\link[=breseq_coverage_paths]{breseq_coverage_paths()}} for building file paths when working with
 breseq output.
 }
+\keyword{internal}
