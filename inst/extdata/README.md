@@ -65,8 +65,8 @@ library(CovDecayAnalyzer)
 
 extdata_dir <- system.file("extdata", package = "CovDecayAnalyzer")
 
-## Read one file directly
-cov <- read_coverage_tab(
+## Read one file directly (read_coverage_tab() is internal, hence :::)
+cov <- CovDecayAnalyzer:::read_coverage_tab(
     file.path(extdata_dir, "A1", "08_mutation_identification",
               "Exported.coverage.tab")
 )
