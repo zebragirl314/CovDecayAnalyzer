@@ -38,8 +38,9 @@ make_scenario <- function(..., bin_size = 5000L) {
     ## s_ref is a scale parameter (PLAN.md 2.2): slopes are s_ref * (1 + ...).
     ## Legacy absolute inputs (per bp) are converted: Delta_std = Delta / s_ref,
     ## cv = tau / s_ref. Absolute `Delta` and `tau` are derived fields.
-    if (!is.null(args$Delta)) sc$Delta_std <- args$Delta / sc$s_ref
-    if (!is.null(args$tau)) sc$cv <- args$tau / sc$s_ref
+    ## Exact matching: `args$Delta` would partial-match `Delta_std`.
+    if (!is.null(args[["Delta"]])) sc$Delta_std <- args[["Delta"]] / sc$s_ref
+    if (!is.null(args[["tau"]])) sc$cv <- args[["tau"]] / sc$s_ref
     sc$Delta <- sc$s_ref * sc$Delta_std
     sc$tau <- sc$s_ref * sc$cv
     sc$G <- as.integer(sc$G)
@@ -230,9 +231,67 @@ pilot_grid <- function() {
     grid
 }
 
+## Tier 1 exploratory grid (A2-2; PLAN.md 4.2, scoped by the A2-2 prompt).
+## Reference nuisance: L = 238,080, s_ref = 6e-6, anchor 0.5 L, cv = 1/3,
+## sigma_atom = 0.15, 5 kb bins.
+##   factorial: n {2,3,5,10} x G {2,3,4} x Delta_std {0, 0.5, 1, 1.5}  (48)
+##   sweeps (one at a time, n {3,5}, G = 2, Delta_std {0, 1}): cv, sigma_atom,
+##     L, s_ref, anchor fraction, and bin size (1 kb on the reference
+##     datasets: same scenario ID, so paired with the 5 kb reference cells).
+##   collapse_extra: cv-sweep cells at Delta_std matched to the reference
+##     Delta_std / cv = 3 (cv 1/6 -> 0.5; cv 2/3 -> 2), n {3,5}, G = 2, so the
+##     collapse check has matched-ratio cells along the cv axis.
+## `family`, `sweep_factor`, `sweep_level` tag each row.
+explore_grid <- function() {
+    cells <- list()
+    add <- function(family, factor, level, bin_size = 5000L, ...) {
+        sc <- make_scenario(..., bin_size = bin_size)
+        row <- scenario_to_row(sc)
+        row$family <- family
+        row$sweep_factor <- factor
+        row$sweep_level <- as.character(level)
+        cells[[length(cells) + 1L]] <<- row
+    }
+    for (n in c(2L, 3L, 5L, 10L)) for (G in 2:4) {
+        for (d in c(0, 0.5, 1, 1.5)) {
+            add("factorial", "reference", "reference", n = n, G = G,
+                Delta_std = d)
+        }
+    }
+    sweeps <- list(
+        cv = c(1 / 6, 2 / 3),
+        sigma_atom = c(0.05, 0.30, 0.50),
+        L = c(50000, 100000, 500000),
+        s_ref = c(3e-6, 1.2e-5),
+        anchor_frac = c(0.1, 0.25, 0.75, 0.9)
+    )
+    for (f in names(sweeps)) for (lv in sweeps[[f]]) {
+        for (n in c(3L, 5L)) for (d in c(0, 1)) {
+            args <- list(family = "sweep", factor = f, level = lv, n = n,
+                G = 2L, Delta_std = d)
+            args[[f]] <- lv
+            do.call(add, args)
+        }
+    }
+    for (n in c(3L, 5L)) for (d in c(0, 1)) {
+        add("sweep", "bin_size", 1000, bin_size = 1000L, n = n, G = 2L,
+            Delta_std = d)
+    }
+    for (n in c(3L, 5L)) {
+        add("collapse_extra", "cv", 1 / 6, n = n, G = 2L, Delta_std = 0.5,
+            cv = 1 / 6)
+        add("collapse_extra", "cv", 2 / 3, n = n, G = 2L, Delta_std = 2,
+            cv = 2 / 3)
+    }
+    grid <- do.call(rbind, cells)
+    stopifnot(!anyDuplicated(grid[c("scenario_id", "bin_size")]))
+    grid
+}
+
 build_grid <- function(tier) {
     switch(tier,
         pilot = pilot_grid(),
-        stop("Tier '", tier, "' is not defined in A2-1; see PLAN.md 4.2.")
+        explore = explore_grid(),
+        stop("Tier '", tier, "' is not defined; see PLAN.md 4.2.")
     )
 }

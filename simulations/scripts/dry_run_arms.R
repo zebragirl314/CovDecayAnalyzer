@@ -22,7 +22,7 @@ cat(sprintf("Reparam check (primary, G=2 n=5, R=20): Type I %.2f (CP %.2f-%.2f),
 
 sc <- make_scenario(G = 2L, n = 3L, Delta_std = 0)
 arms <- list(lmm = analyze_lmm, lmm_slope_only = analyze_lmm_slope_only,
-    kw_chisq = analyze_kw_chisq, kw_exact = analyze_kw_exact,
+    kw_chisq = analyze_kw_chisq, kw_perm = analyze_kw_perm,
     two_stage = analyze_two_stage)
 invisible(lapply(arms, function(f) f(generate_replicate(sc, 999L))))  # warm-up
 R <- 60L

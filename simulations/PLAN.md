@@ -821,3 +821,29 @@ something I would do.
 - The `n_samples < 3` and per-group `< 2` errors mean the smallest valid
   design is `G = 2`, `n = 2`; the grid starts there and no cell triggers
   those errors by construction.
+
+---
+
+## 11. A2-2 outcomes that change the plan (2026-10-23)
+
+Details and numbers are in `session-logs/session-2026-10-23-a2-2.md` and
+`results/explore/tier1/`. Only plan-relevant changes are recorded here.
+
+- **Arms.** Five arms run in one pass per dataset (`lmm`, `lmm_slope_only`
+  labeled `lmm_slope_only_CAUTIONARY` in outputs, `kw_chisq`, `kw_perm`,
+  `two_stage`). The permutation arm is `kw_perm` (was `kw_exact`); the method
+  per fit is stored as `kw_perm_method` (`exact_enum` or `random_perm`).
+  Random permutations are seeded from (scenario, replicate).
+- **Tier 1 as run** is the A2-2 prompt's reduced design (112 cells), not the
+  roughly 300-cell Tier 1 of section 4.2: 48 factorial cells, 56 one-at-a-time
+  sweep cells, 4 paired 1 kb cells, and 4 added cv cells at matched
+  `Delta_std / cv`. The geometry Type I map (120 cells) and S1 to S6 were not
+  run. Reference anchor is 0.5 L (confirmed with Carly).
+- **Collapse (2.5).** Power agreed across `s_ref` and across `cv` at matched
+  `Delta_std / cv` within Clopper-Pearson-based intervals, at n in {3, 5},
+  G = 2. The `L = 50 kb` power loss is the one geometry effect seen; it is
+  consistent with the `sigma_bin^2 / Sxx` term in `tau_eff` but was not tested
+  against `Delta / tau_eff`. Tier 3 tests that.
+- **Open before Tier 2:** a pooled-variance two-stage arm (the LMM and the
+  classical-ANOVA two-stage arm gave identical p-values for every balanced
+  G >= 3 cell), the 1 kb scope decision, and the arm freeze commit.

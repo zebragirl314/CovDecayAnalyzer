@@ -76,6 +76,9 @@
                 rows[[i]][[paste0("slope_g", g)]] <- .group_slope_means(sl)[g]
             }
         }
+        if (!is.null(kw$method)) {
+            for (i in 1:3) rows[[i]]$kw_perm_method <- kw$method
+        }
         rows[[1L]]$p_value <- kw$p
         rows[[1L]]$F_stat <- kw$H
         rows[[2L]]$p_value <- min(pa)
