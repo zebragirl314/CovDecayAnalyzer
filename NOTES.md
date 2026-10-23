@@ -38,14 +38,43 @@ conservative convention; see the null-distribution vignette for the exact
 framing.
 
 The previously-used Kruskal-Wallis plus Dunn two-stage approach, described
-in the lab's older methods document, is superseded. It will be re-
-implemented in the package as a benchmark function so the simulation study
-can compare the two routes head to head. Three variants of the benchmark
-will be implemented: KW with chi-square p-values (traditional), KW with
-exact permutation p-values (correct at small n), and a two-stage parametric
-alternative (per-sample slope then Welch/ANOVA).
+in the lab's older methods document, is superseded. It is reimplemented
+in the simulation study as a benchmark function in three variants: KW
+with chi-square p-values (traditional), KW with permutation p-values
+(correct at small n), and a two-stage parametric alternative (per-sample
+slope then Welch's or pooled t for G=2, one-way ANOVA for G>=3).
 
 Carly Bobak holds editorial authority on method decisions for this package.
+
+## Paper's methodological argument (post-A2-3)
+
+The simulation study has shifted the paper's framing. The LMM's value is
+specifically in three areas, not in a general "beats two-stage" claim:
+
+- Unbalanced designs. Classical ANOVA on per-sample slopes assumes equal
+  n per group; the LMM accommodates imbalance by construction.
+- Heteroscedastic designs (residual variance or between-sample slope
+  variance differing across groups). The LMM can be extended to model
+  this; the two-stage framework cannot.
+- The random-anchor null test, which the two-stage framework does not
+  support.
+
+At balanced designs with G>=3, the pooled-variance two-stage ANOVA ties
+the primary LMM on every validation cell at Tier 1. The paper reports
+this finding directly rather than overstating the LMM's advantage.
+
+At G=2 with balanced designs, the LMM's small-n gain over the two-stage
+is specifically about pooled vs Welch variance (not about the mixed-model
+framework). The two-stage with pooled variance also ties the LMM at
+G=2 n>=3.
+
+The paper's cautionary paragraph will describe the slope-only
+parameterization (random slope, no random intercept): Type I of 0.507
+(95% CI 0.493-0.521) at R=5000 reference, confirming the random
+intercept absorbs real correlation structure despite the near-degenerate
+covariance estimate. The slope-only arm also shows bin-size-dependent
+Type I inflation (+0.037 from 5 kb to 1 kb at R=1000), strengthening
+the argument.
 
 ## Simulation study
 
@@ -59,9 +88,8 @@ Simulations serve three ends:
    space spanning plausible scenarios for dsDNA viruses with localized
    replication origins. The study is not HCMV-calibrated; HCMV is one
    application point within the space.
-2. Benchmark LMM plus Kenward-Roger against KW plus Dunn (chi-square),
-   KW plus Dunn (exact), and a two-stage parametric alternative on the
-   same simulated data.
+2. Benchmark LMM plus Kenward-Roger against three KW+Dunn variants and
+   two two-stage parametric variants on the same simulated data.
 3. Produce the empirical power surface that will fit the sample size
    calculator added as a new package function.
 
@@ -70,33 +98,61 @@ observations review):
 
 - Baseline generative model: dsDNA viral coverage structure with
   configurable anchor, effect size, n per group, bin size, additive
-  noise, parameterized to span biologically plausible ranges for linear-
-  reference-coordinate analysis of viral genomes.
-- Autocorrelated residuals sensitivity. The LMM assumes residual
-  independence given random intercept and slope. Adjacent bins from the
-  same sample have correlated residuals when the true decay is not log-
-  linear, which can make within-sample F anti-conservative. The direction
-  of the effect on the between-sample interaction test is unclear and
-  worth measuring directly.
-- Zero-coverage dropout sensitivity. `normalize_coverage` adds 1e-5 before
-  taking the log, so a zero-coverage bin produces a value near -11.5, a
-  high-leverage outlier on the log scale. The simulation should test
-  whether realistic dropout rates bias slope estimates.
+  noise, parameterized by `s_ref` as a scale parameter with between-
+  sample variability as a coefficient of variation `cv = tau/s_ref` and
+  group effect as a fractional change `Delta_std = Delta/s_ref`. The
+  s_ref reparameterization was adopted at A2-2 after the original
+  absolute-units parameterization confounded the collapse hypothesis.
 - Group-effect pattern for G >= 3 is "one group differs from the shared
-  reference." Equal spacing is not the default.
+  reference." NOT equal spacing. Specifically: for G=3 with effect size
+  Delta_std, two groups have decay rate s_ref and one has
+  s_ref * (1 + Delta_std); analogously for G=4.
+- Simulate before normalization: the generator draws coverage on a 1 kb
+  atom grid, aggregates to the analysis bin size, and calls the
+  package's own normalize_coverage(). Skipping normalization would
+  change the random-effects structure and invalidate Type I estimates.
+- Autocorrelated residuals sensitivity (parked for Tier 2): residuals
+  correlated across adjacent bins per sample.
+- Zero-coverage dropout sensitivity (parked for Tier 2): dropouts
+  generated as runs on the atom grid.
+- Partial-matching convention for simulation code: all simulation-side
+  function signatures should prevent R's partial argument matching from
+  silently rewriting inputs. The A2-2 prep found `args$Delta` partial-
+  matching `Delta_std`; use `match.arg()` or explicit validation.
+- Integer overflow convention: any count-based computation that could
+  exceed 2^31 at the full-R replicate counts should use numeric
+  arithmetic by construction. The paired_diff() function hit this at
+  A2-3 R=5000.
 
-## Open design questions (post-Tier-0)
+## Simulation findings parked for the paper's Discussion
 
-- M1: random-effects covariance degeneracy. Reading `test_decay_slopes`
-  suggests that median normalization pins each sample's intercept to its
-  slope, so the random-effects covariance may be degenerate by
-  construction and `isSingular(fit)` may fire on nearly every fit. If
-  Tier 0 confirms this prediction, the surface-isSingular decision from
-  Session 2 needs revisiting. Three resolutions on the table: suppress
-  the warning and leave `isSingular` as a programmatic field only; report
-  the random-effects correlation estimate instead of just singularity; or
-  switch the primary model to random-slope-only. All three are post-A2-1
-  decisions.
+- Collapse hypothesis supported at Tier 1: power at matched Delta_std/cv
+  agrees across s_ref levels within Monte Carlo CI. The sample size
+  calculator can be indexed by the standardized effect alone.
+- Anchor-position Type I resolved at Tier 1 plus A2-3: no inflation at
+  interior anchors across the geometric range tested. The 0.105 Tier 1
+  reading at 0.25 L was a 200-replicate noise artifact; at R=5000 it is
+  0.0500 (0.044-0.056).
+- 1 kb vs 5 kb at reference cell at R=1000: Type I 0.051 vs 0.049,
+  paired power differences bounded within 0.009 across effect sizes.
+  No bin-size calibration issue.
+- Permutation Dunn vs normal-approximation Dunn at G=3 n=5: agree
+  within noise (0.962 vs 0.958). Dunn's chi-square approximation
+  problem is specifically an omnibus problem, not a post-hoc problem.
+- KW permutation Type I is zero at G=2 n<=3 by construction (smallest
+  possible p-value is 0.10, which exceeds 0.05 for any n and G where
+  the enumeration has fewer than 20 distinct values).
+
+## Open design questions (post-Tier 2)
+
+- M1: random-effects covariance degeneracy, resolved for now. 13%
+  singular rate with intercept-slope correlation near -1 in most fits.
+  Session 2 isSingular surface decision stands. The slope-only
+  comparator (0.507 Type I) demonstrates the intercept is doing real
+  work. No further investigation planned unless Tier 2 surfaces new
+  evidence.
+- M3: anchor at the extremes (0.0 and 1.0, single-arm geometry) not yet
+  tested at R=5000. Carry into Tier 2 as a sensitivity cell.
 
 ## Session summary convention
 
@@ -110,35 +166,40 @@ working-rules block.
 
 ## Punch list
 
-Package work (Track A):
+Package work (Track A, substantially complete):
 - Reclassify six exported helpers (DONE Session 4).
 - Raise `R/null_distribution.R` test coverage above 80% (DONE Session 2).
 - Bring vignettes up to date with `plot_sample` (DONE Session 3).
 - Switch plot defaults to Okabe-Ito for colorblind-safe palettes
   (DONE Session 3).
-- Add Kruskal-Wallis plus Dunn benchmark function (three variants).
-  Prototype in `simulations/` during A2-2; promote to package after
-  simulation design settles the API.
-- Add sample size calculator function, fitted from simulation output.
+- Add KW+Dunn benchmark function (three variants) to the package. The
+  simulation study prototypes all three; promote to the package after
+  Tier 2 confirms the final API. The pooled-variance two-stage is also
+  a candidate for promotion.
+- Add sample size calculator function, fitted from simulation output
+  (A2-4 or later). Collapse hypothesis supports a one-input calculator
+  indexed by standardized effect size.
 - `DESCRIPTION` text corrections (stale ANOVA, KW, permutation claims;
-  stale RPM reference; `pbkrtest` Imports/Suggests question). Grouped
-  with a later release-hygiene session.
-
-Methodological fixes authorized 2026-10-22 (full detail in `PLAN.md`
-Session 2): all applied in Sessions 1, 2.
+  stale RPM reference). Pending.
+- `pbkrtest` must move from Suggests to Imports. Confirmed required at
+  install time by the A2-1 clean renv install; `test_decay_slopes()`
+  needs it for Kenward-Roger. Not blocking for A2 but blocking for any
+  release.
+- Reclassification follow-up pattern: future API-reclassification
+  sessions should grep for usages of each demoted function in `inst/`,
+  `vignettes/`, `README.md`, and `NEWS.md` and update them. Session 4
+  missed the extdata README example and it was caught at A2-1.
 
 Simulation study (Track A2):
-- Open at A2-1 with generator, infrastructure, and Tier 0 pilot. See
-  `simulations/PLAN.md` for execution sequence.
+- A2-1 through A2-3 complete. Tier 1 exploratory and three focused
+  high-R cells committed. Next: A2-4 (Tier 2 proper).
 
 Methods paper (Track B):
-- Carly writes an updated methods document reflecting the LMM approach,
-  to supersede the older Kruskal-Wallis document on REDS. Position the
-  method as general (dsDNA viruses with localized replication origins)
-  with HCMV as a demonstration application.
-- Methods paper draft with intro positioning LMM over KW, methods
-  derived from the updated document, results from simulations plus HCMV
-  demonstration section.
+- Methods document superseding the old KW doc on REDS: write after
+  A2-3 is committed. The two-stage parity finding reshaped the paper's
+  argument; writing the methods doc now would require redoing it
+  against the pivot.
+- Methods paper draft follows the methods document.
 
 Pipeline integration (Track C):
 - Optional coverage-decay module in the SLURM pipeline, wrapping the
@@ -148,13 +209,15 @@ Pipeline integration (Track C):
 Deferred:
 - GitHub organization move. Package currently at
   `github.com/zebragirl314/CovDecayAnalyzer` (intern's personal account);
-  destination TBD (BoscoResearchGroup already referenced in `DESCRIPTION`).
+  destination TBD.
 - Circular-biology-analyzed-as-linear sensitivity cell. Noted as a
-  limitation in the paper's Discussion rather than tested in the
-  simulation study; most users analyzing HCMV already do exactly this
-  and it works for them.
-- Design-question `plot_sample` fit line uses all sample bins, not only
-  in-window bins. Revisit on next editorial pass of intro vignette.
+  limitation in the paper's Discussion rather than tested.
+- `plot_sample` fit line currently uses all sample bins, not only in-
+  window bins. Revisit on next editorial pass of intro vignette.
+- Simulation results size management: Tier 1 at 22,400 datasets was
+  3 MiB; Tier 2 at ~400,000 datasets could reach 50 MiB. Options when
+  needed: `xz` compression on per-replicate `.rds`, external storage
+  with checksums committed, or Git LFS. Revisit before Tier 2 commits.
 
 ## Baseline state
 
@@ -163,6 +226,7 @@ clean, all tests pass, 67% overall line coverage, docs regenerated with
 roxygen2 8.1.1. This tag is an immovable reference point; use
 `git diff baseline-pre-claude` to see cumulative changes from here.
 
-Current state: Track A complete (Sessions 1 through 4 committed), 158
-tests passing, R CMD check clean with zero notes, overall coverage above
-91%, Track A2 planning committed. Next: A2-1 execution.
+Current state (post-A2-3): Track A complete (Sessions 1 through 4
+committed), 158 tests passing, R CMD check clean with zero notes,
+overall coverage above 91%. Track A2 at Tier 1 exploratory plus three
+focused high-R cells complete. Next: A2-4 (Tier 2 proper).
