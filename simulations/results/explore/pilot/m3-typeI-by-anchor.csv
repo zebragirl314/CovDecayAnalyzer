@@ -1,0 +1,4 @@
+"scenario_id","anchor_frac","n_fits","n_failed","n_reject","typeI","ci_lower","ci_upper","singular_rate"
+"sc2e28a864ec",0.1,20,0,0,0,0,0.168433470983085,0
+"scb0965d11a7",0.5,20,0,3,0.15,0.0320709371854637,0.378926826545314,0
+"sc3cb983ccb6",0.9,20,0,0,0,0,0.168433470983085,0

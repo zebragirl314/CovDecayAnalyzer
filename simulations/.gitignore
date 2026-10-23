@@ -1,0 +1,6 @@
+_targets/
+renv/library/
+renv/local/
+renv/python/
+renv/staging/
+results/scratch/

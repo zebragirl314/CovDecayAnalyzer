@@ -1,0 +1,60 @@
+## =========================================================================
+## Pipeline for the simulation study (PLAN.md 5.1, 5.5). Run from
+## simulations/.
+##
+##   CDA_SIM_TIER     tier to build: "pilot" (the only tier defined in A2-1)
+##   CDA_SIM_R        replicates per scenario (default 20)
+##   CDA_SIM_BATCH    replicates per batch (default 20)
+##   CDA_SIM_WORKERS  1 (default): targets::tar_make(), serial.
+##                    >1: future multisession; run targets::tar_make_future().
+##
+## The unit of work is a batch (one scenario x bin size x block of
+## replicates); dynamic branching goes over batches. Only the Tier 0 targets
+## are declared here: scenario grid, generator and primary-test analysis (run
+## together inside `sim_batch`, so every arm will be paired on the same
+## dataset), and the timing summary. Benchmark arms and the Type I and power
+## summaries are added in A2-2.
+## =========================================================================
+
+library(targets)
+
+source("R/setup.R")
+load_sim()
+
+tier    <- Sys.getenv("CDA_SIM_TIER", "pilot")
+R       <- as.integer(Sys.getenv("CDA_SIM_R", "20"))
+batch   <- as.integer(Sys.getenv("CDA_SIM_BATCH", "20"))
+workers <- as.integer(Sys.getenv("CDA_SIM_WORKERS", "1"))
+
+if (workers > 1L) {
+    ## Parallelism is at the branch level only; pin BLAS/OpenMP threads so
+    ## workers do not oversubscribe the machine.
+    Sys.setenv(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1",
+        VECLIB_MAXIMUM_THREADS = "1")
+    future::plan(future::multisession, workers = workers)
+}
+
+tar_option_set(
+    packages = c("tibble", "data.table"),
+    error = "continue"
+)
+
+list(
+    ## Files that define the statistics. A change to any invalidates the
+    ## downstream simulation branches; unrelated package edits do not.
+    tar_target(
+        pkg_methods,
+        file.path("..", "R", c("decay_tests.R", "null_distribution.R",
+            "decay_slopes.R", "coverage_io.R")),
+        format = "file"
+    ),
+    tar_target(grid, build_grid(tier)),
+    tar_target(batches, expand_batches(grid, R, batch)),
+    tar_target(
+        sim_batch,
+        run_batch(batches, pkg_methods),
+        pattern = map(batches)
+    ),
+    tar_target(sim_all, sim_batch),
+    tar_target(timing_summary, summarize_timing(sim_all))
+)

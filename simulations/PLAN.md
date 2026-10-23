@@ -1,8 +1,10 @@
 # simulations/PLAN.md: Track A2 simulation study
 
-Status: proposal, drafted 2026-10-22, awaiting Carly's review. No simulation
-code exists yet. Nothing in this document is a decision until Carly says so;
-section 9 lists what must be settled before execution starts.
+Status: revised at the start of A2-1 (2026-10-22) to reflect Carly's
+resolved decisions on Q1 to Q10 (section 9, "Resolved"). The scope is a
+parameter space spanning plausible dsDNA-virus scenarios with localized
+replication origins; it is not HCMV-calibrated. Section 10 M1 is a
+post-A2-1 decision (see `NOTES.md`).
 
 Scope: the simulation study described in the "Simulation study" section of
 `NOTES.md`. The package work (`PLAN.md`), the methods paper (Track B), and
@@ -40,10 +42,16 @@ how `test_decay_slopes` documents using them).
 nuisance variance, over a range of effect sizes spanning "undetectable" to
 "obvious", including the smallest `n` that reaches 80% power per scenario.
 
-**C3. Head-to-head against Kruskal-Wallis plus Dunn.** On identical simulated
-datasets (paired by construction), compare Type I error and power of the two
-routes, omnibus and pairwise. Paired differences get Monte Carlo CIs (McNemar
-style), not two independent rates.
+**C3. Head-to-head against three benchmark arms.** On identical simulated
+datasets (paired by construction), compare Type I error and power of the
+primary LMM against three benchmarks, omnibus and pairwise: (i) KW (chi-square
+p-value) + Dunn-Holm, (ii) KW (exact permutation p-value) + Dunn-Holm, and
+(iii) a two-stage parametric arm (per-sample slope, then Welch's t for `G = 2`
+or one-way ANOVA for `G >= 3`). Dunn-Holm is computed both gated on KW `p <
+0.05` and ungated. Paired differences get Monte Carlo CIs (McNemar style), not
+two independent rates. A random-slope-only LMM comparator
+(`(0 + distance_scaled | sample)`) is a conditional fourth arm, triggered only
+if Tier 0 confirms M1. Benchmarks are implemented in A2-2.
 
 **C4. Sensitivity.** How much C1 and C2 change under (a) residual
 autocorrelation and mean-curve misspecification, (b) zero-coverage dropouts
@@ -55,16 +63,18 @@ standalone claims.
 stated domain of validity and a held-out accuracy check (target: held-out
 absolute error on power below 0.03 inside the domain).
 
-**C6. Anchor-specificity test (secondary). Needs Carly's go/no-go, see Q3.**
-Type I error and power of the `(k+1)/(n+1)` empirical p-value from
+**C6. Anchor-specificity test (secondary). In scope at reduced size, Tier 4
+(Q3). Not implemented in A2-1.** Type I error and power of the `(k+1)/(n+1)` empirical p-value from
 `test_decay_significance()`, under the specificity null ("a real group effect
 exists, but it is not localized at the observed anchor") and under a localized
 effect. This is the expensive claim: each replicate costs `n_random + 1` LMM
 fits.
 
-What the study does *not* claim: validity on real HCMV data (that is Track B's
-empirical section), validity for circular genomes, or anything about
-reads-per-million quantification.
+What the study does *not* claim: validity on any specific organism's real data
+(HCMV included; that is Track B's empirical section), validity for circular
+genomes, or anything about reads-per-million quantification. The study
+characterizes behavior across a parameter space; HCMV is one application point
+within it, not its center.
 
 ---
 
@@ -134,17 +144,28 @@ e_ia ~ N(0, sigma_atom^2), independent across atoms and samples (within-sample n
   switched on only in the low-depth sensitivity (`D` median 10). One
   validation figure (appendix) compares log-normal atoms against a per-base
   negative-binomial generator at three depths to justify the approximation.
-- **Group effect.** `Delta_g` shifts the group's mean decay rate; group 1 is
-  the reference (`Delta_1 = 0`). Effect size `Delta` is the *range* of group
-  decay rates. For `G = 2` this is the single difference. For `G >= 3` the
-  baseline pattern is equally spaced rates across that range (`Delta_g =
-  (g-1)/(G-1) * Delta`); the alternative "one group differs, the rest equal"
-  is a sensitivity pattern and is also the partial null for C1b.
-- **Reference rate.** `s_ref = 6e-6` per bp, i.e. a two-fold coverage drop
-  over about 115 kb. This is my estimate of HCMV replication-gradient scale,
-  not a measured value; it must be replaced or confirmed with real data
-  (Q1). Note the shipped example data (5e-4 vs 3e-3 per bp on a 2 kb genome)
-  is not HCMV-scale and should not be used for calibration.
+- **Group effect (one group differs).** `Delta_g` shifts the group's mean
+  decay rate; group 1 is the reference. Effect size `Delta` is the difference
+  between the one differing group and the shared reference rate. Exact
+  parameterization (Q9): `G = 2`: groups have `s_ref` and `s_ref + Delta`.
+  `G = 3`: two groups have `s_ref`, one has `s_ref + Delta`. `G = 4`: three
+  groups have `s_ref`, one has `s_ref + Delta`. The differing group is the
+  last one (`g = G`). Equal spacing is not used. Because the omnibus F has `G
+  - 1` numerator df, a single differing group is diluted as `G` grows; power
+  falling with `G` at fixed `Delta` is expected, not a defect. The same
+  pattern with `Delta = 0` is the global null; partial nulls for C1b are
+  patterns in which the differing group is absent from the pair under test.
+- **Reference rate.** `s_ref` is a primary axis (section 4), with levels 3e-6,
+  6e-6 and 1.2e-5 per bp, spanning a twofold coverage drop over roughly 230 kb
+  to 58 kb. The middle level, 6e-6 (twofold over about 115 kb), is the center
+  of the plausible range, not an estimate for any organism. The shipped
+  example data (5e-4 vs 3e-3 per bp on a 2 kb genome) is outside the range and
+  is not used for calibration.
+- **Slope sign.** `s_i = s_ref + Delta_g + u_i` is not truncated, so at the
+  low `s_ref` and high `tau` corners a minority of samples have negative `s_i`
+  (coverage rising with distance). This keeps the random-slope distribution
+  Gaussian, as the LMM assumes. The realized fraction is a function of
+  `s_ref / tau` and is stored per scenario.
 
 ### 2.3 How the sensitivity analyses modify the baseline
 
@@ -245,7 +266,7 @@ moderate `R` over many cells beats large `R` over few.
 
 | Tier | Purpose | R per cell | Output status |
 |---|---|---|---|
-| 0. Pilot | Timing, failure rates, singular rates, generator checks, check the collapse hypothesis (2.5) crudely | 20 | Not committed (diagnostic) |
+| 0. Pilot | Timing, failure rates, singular rates, generator checks, check the collapse hypothesis (2.5) crudely | 20 | CSVs and a short report in `results/explore/pilot/`; diagnostic, not a claim |
 | 1. Exploratory | Locate interesting regions, decide which axes matter, freeze the grid | 200 | Committed as `results/explore/` |
 | 2. Final Type I | C1, C1b, C3 (Type I half), C4 Type I | 5000 baseline; 2000 sensitivity | Committed |
 | 3. Final power | C2, C3 (power half), C4 power | 1000 on the figure cells; 300 on the surface design | Committed |
@@ -258,7 +279,8 @@ rerunning, which the `targets` dependency tracking in section 5 enforces.
 
 ### Compute estimates (every unit-time figure is a placeholder)
 
-I have not timed a single fit. `R/null_distribution.R` documents one to a few
+These are the pre-A2-1 placeholders; the A2-1 session log replaces them with
+measured values. I had not timed a single fit. `R/null_distribution.R` documents one to a few
 seconds per fit for about 30 samples; for the 4 to 40 samples used here I
 assume roughly 0.3 s per `test_decay_slopes()` call including the `emmeans`
 steps. Tier 0 replaces this with a measurement.
@@ -280,87 +302,122 @@ targets.
 
 ## 4. Parameter grid
 
+The study maps behavior over a parameter space; it is not centered on any one
+organism. Parameter values below are "centers of plausible ranges" for dsDNA
+viruses with localized replication origins.
+
 ### 4.1 Axes and roles
 
-**Primary** (varied in every scenario family):
+**Design axes** (varied in the main grid):
 
 | Axis | Values | Notes |
 |---|---|---|
-| Samples per group `n` | 2, 3, 4, 5, 6, 8, 10 (Tier 1 subset: 2, 3, 5, 10) | Balanced groups in the main grid. Unbalanced designs (e.g. 2 vs 5) are one sensitivity cell family, since real experiments are often unbalanced. |
-| Number of groups `G` | 2, 3, 4 | |
-| Effect size `Delta` (range of decay rates, per bp) | 0, 1e-6, 2e-6, 3e-6, 4.5e-6, 6e-6 | See table below for what these mean. |
+| Samples per group `n` | 2, 3, 4, 5, 6, 8, 10 (Tier 1 subset: 2, 3, 5, 10) | Balanced groups in the main grid. Unbalanced designs (2 vs 5; 3 vs 8, `G = 2`) are a sensitivity family. |
+| Number of groups `G` | 2, 3, 4 | One-differs pattern (2.2). |
+| Effect size `Delta` (per bp) | 0, 1e-6, 2e-6, 3e-6, 4.5e-6, 6e-6 | Difference between the differing group and the reference rate. |
 
-Interpretation of `Delta` against `s_ref = 6e-6` and `tau = 2e-6`:
+**Geometry axes** (promoted to primary; treated as nuisance variables for
+sensitivity mapping, not crossed with the design axes):
 
-| `Delta` (per bp) | Standardized `Delta / tau` | Extra coverage ratio across 100 kb | Reads as |
+| Axis | Values | Reference value |
+|---|---|---|
+| Genome length `L` | 50,000; 100,000; 238,080; 500,000 bp | 238,080 |
+| Reference decay rate `s_ref` (per bp) | 3e-6, 6e-6, 1.2e-5 | 6e-6 |
+| Anchor position (fraction of `L`) | 0.1, 0.25, 0.5, 0.75, 0.9 | 0.5 |
+
+`s_ref` levels give a twofold coverage drop over about 230, 115 and 58 kb. The
+anchor reference of 0.5 is the center of the range (interior, two equal
+arms); HCMV's OriLyt (about 0.39 L) is one application point inside the range,
+not the reference. The extremes, anchor at 0 or at `L`, have one arm and are a
+separate sensitivity (S6 below), not part of the five levels.
+
+**Nuisance axes** (one-at-a-time around the reference, then crossed at reduced
+size):
+
+| Axis | Values (reference in bold) | Notes |
+|---|---|---|
+| Between-sample slope SD `tau` | 1e-6, **2e-6**, 4e-6 | Governs power through `Delta / tau_eff` (2.5). |
+| Atom-level residual SD `sigma_atom` | 0.05, **0.15**, 0.30, 0.50 | At 1 kb atoms; SD at 5 kb bins is `sigma_atom / sqrt(5)` for independent noise. Realized `sigma(fit)` is stored. |
+
+Interpretation of `Delta` at the reference (`s_ref = 6e-6`, `tau = 2e-6`):
+
+| `Delta` (per bp) | `Delta / tau` | Extra coverage ratio across 100 kb | Reads as |
 |---|---|---|---|
 | 0 | 0 | 1.00 | null |
 | 1e-6 | 0.5 | 1.11 | barely detectable |
 | 2e-6 | 1.0 | 1.22 | small |
 | 3e-6 | 1.5 | 1.35 | moderate |
 | 4.5e-6 | 2.25 | 1.57 | clear |
-| 6e-6 | 3.0 | 1.82 | obvious (treated decays at twice the reference rate) |
+| 6e-6 | 3.0 | 1.82 | obvious (twice the reference rate) |
 
-Both the absolute `Delta` and the standardized `Delta / tau` are recorded per
-scenario, because the surface (C5) will probably be indexed by the latter
-(2.5).
+Absolute `Delta`, `Delta / tau`, and the realized `Delta / tau_eff` are all
+recorded per scenario, because the surface (C5) is probably indexed by the
+last (2.5).
 
-**Secondary, crossed at reduced size in Tier 1 and varied one at a time
-thereafter:**
-
-| Axis | Values (baseline in bold) | Notes |
-|---|---|---|
-| Between-sample slope SD `tau` | 1e-6, **2e-6**, 4e-6 | Cross with `Delta` through the standardized effect. |
-| Atom-level residual SD `sigma_atom` | 0.05, **0.15**, 0.30, 0.50 | Defined at the 1 kb atom level. For independent noise the SD at 5 kb bins is `sigma_atom / sqrt(5)`; realized `sigma(fit)` is stored so users can map their own estimate. |
-
-**Held fixed in the main grid, varied one-at-a-time in sensitivity:**
+**Fixed or paired factors:**
 
 | Axis | Main grid | Sensitivity values |
 |---|---|---|
-| Bin size | **5 kb** | 1 kb (paired, same datasets) |
-| Genome length | **238,080** (HCMV, as in the package examples) | 100,000; 500,000 |
-| True anchor position | **0.39 L** (about 93 kb, OriLyt-like) | 0 (genome start, one arm only); 0.5 L; L (genome end) |
+| Bin size | **5 kb** | 1 kb, paired on the same datasets (Q5) |
 | Window | none (full genome) | 50 kb |
-| `s_ref` | 6e-6 | 3e-6; 1.2e-5 |
-| Group-effect pattern for `G >= 3` | equally spaced | one group differs |
-| Balance | balanced | 2 vs 5; 3 vs 8 (G = 2) |
+| Balance | balanced | 2 vs 5; 3 vs 8 (`G = 2`) |
+| End anchors (S6) | none | anchor at 0 or at `L` (one arm) |
 
-**Bin size.** I propose 5 kb for the main grid and 1 kb as a paired
-sensitivity. Reason: the claims should describe how the method behaves in the
-lab's actual practice, and 5 kb is that practice. The 1 kb package default is
-still validated, in full for C1 (it costs one extra fit per dataset) and at
-the reference cells for C2. Caveat: 5 kb on 238 kb gives only 48 bins per
-sample, so the effective number of bins is small enough that S1 and S2
-results may differ visibly between bin sizes; that is a finding, not a
-problem. This is Q5.
+**Bin size.** 5 kb is the main grid and 1 kb the paired sensitivity: same
+simulated atoms, one extra fit. The 1 kb package default is validated in full
+for C1 and at the reference cells for C2. At `L = 50 kb`, 5 kb bins give only
+10 bins per sample (and 1 or 2 bins on the short arm at anchor 0.1); the
+short-genome cells are therefore expected to be fragile and are reported as
+such, not dropped.
 
-**Genome length.** 238,080 for the main grid; 100 kb and 500 kb as
-sensitivity. Per-bp rates are held fixed, so a shorter genome carries less
-total decay (`Delta * L`) and is harder; that is the correct behavior for
-"my genome is smaller", and results are also tabulated against the total
-log-decay across the half-genome so the two views can be reconciled.
+**Geometry and total decay.** Per-bp rates are held fixed across `L`, so a
+shorter genome carries less total decay (`Delta * L`) and is harder; that is
+the correct behavior for "my genome is smaller". Results are also tabulated
+against the total log-decay across the longer arm so the two views reconcile.
 
-**Anchor.** The true anchor and the analysis anchor coincide in the main grid.
-Anchor position changes the distance range, the number of arms, and `Sxx`, so
-it shifts `tau_eff` (2.5). The genome-start and genome-end cases have a
-single arm and are the geometrically extreme ones.
+### 4.2 Grid construction: a lean design justified by the collapse hypothesis
 
-### 4.2 Grid construction per tier
+A full crossing of the design axes (7 x 3 x 6 = 126) with the geometry axes
+(4 x 3 x 5 = 60) is 7,560 cells and is not run. Section 2.5 predicts that
+`L`, `s_ref`, anchor, `sigma_atom`, and bin size act on power *only through*
+`tau_eff`, so power collapses onto `(n, G, Delta / tau_eff)`. The grid is
+built to test that prediction and then use it, rather than assume it:
 
-- **Tier 1:** full factorial on `n` in {2, 3, 5, 10} x `G` in {2, 3, 4} x
-  `Delta` in {0, 2, 4.5, 6}e-6 at baseline nuisance (48 cells), plus
-  one-at-a-time sweeps of `tau`, `sigma_atom`, bin size, genome length,
-  anchor, and each of S1 to S5 at `n` in {3, 5}, `G = 2`, `Delta` in {0, 3,
-  6}e-6 (about 100 cells).
-- **Tier 2 (Type I):** `Delta = 0`, `n` x `G` full (21 cells) at 5 kb and
-  1 kb; partial nulls for `G` in {3, 4}; sensitivities S1 to S5 at the
-  reference cells chosen from Tier 1.
-- **Tier 3 (power):** full factorial on `n` x `G` x `Delta` at baseline
-  nuisance for the figures (7 x 3 x 5 nonzero = 105 cells); for the surface, a
-  space-filling design (Sobol) of about 400 points over `n` (integer 2 to
-  12), `G`, `Delta / tau` or `Delta`, `tau`, `sigma_atom`, genome length,
-  anchor fraction. A space-filling design spends replicates where a smooth fit
-  needs them instead of repeating cells.
+- **Headline cells: reference geometry, full design crossing.** `L = 238,080`,
+  `s_ref = 6e-6`, anchor 0.5, reference `tau` and `sigma_atom`; `n` x `G` x
+  `Delta` in full (126 cells; Tier 1 subset 4 x 3 x 4 = 48). Headline Type I
+  and power figures are reported here.
+- **Geometry Type I map (Tier 1 and 2).** All 60 geometry combinations at
+  `Delta = 0`, `G = 2`, `n` in {3, 5} (120 cells). Type I error does not
+  depend on `tau_eff` in theory, so any geometry that departs from nominal is
+  a finding and not explained by the collapse. This is the cheap, complete
+  check on geometry.
+- **Geometry power sweeps (one-at-a-time).** From the reference, vary one
+  geometry axis at a time (3 + 2 + 4 = 9 variants) at `n` in {3, 5}, `G = 2`,
+  `Delta` in {0, 3e-6, 6e-6} (54 cells). Plot power against `Delta` and
+  against `Delta / tau_eff`; collapse is supported if the curves overlay in
+  the second but not the first.
+- **Collapse validation in the surface fit (Tier 3).** The surface design (a
+  Sobol sequence) varies `n`, `G`, `Delta`, `tau`, `sigma_atom`, `L`, `s_ref`
+  and anchor fraction jointly. The collapse is tested by whether a model in
+  `(n, G, Delta / tau_eff)` alone has held-out error below the 0.03 target
+  against the same model with the geometry covariates added. If geometry
+  covariates improve held-out error materially, the calculator takes more
+  inputs and the plan says so; the grid is not widened beforehand.
+- **Nuisance sweeps** for `tau` and `sigma_atom` are one-at-a-time at the
+  reference geometry, `n` in {3, 5}, `G = 2`.
+
+Tiers:
+
+- **Tier 1:** reference-geometry design crossing (48 cells), geometry Type I
+  map (120 cells), geometry power sweeps (54 cells), nuisance sweeps (about
+  14 cells), and each of S1 to S6 at `n` in {3, 5}, `G = 2`, `Delta` in {0,
+  3e-6, 6e-6}. About 300 cells at R = 200.
+- **Tier 2 (Type I):** reference geometry `Delta = 0`, `n` x `G` full (21
+  cells) at 5 kb and 1 kb; partial nulls for `G` in {3, 4}; the geometry Type
+  I map at higher R; S1 to S6 at reference cells chosen from Tier 1.
+- **Tier 3 (power):** reference geometry full factorial (7 x 3 x 5 nonzero =
+  105 cells) for the figures; about 400 Sobol points for the surface.
 
 ---
 
@@ -429,10 +486,10 @@ from the installed `targets` 1.12.0 (checked with its help pages):
 `tar_make_future()` is documented as **superseded** in favor of `tar_make()`
 with the `crew` package, and `crew` and `crew.cluster` (which has a SLURM
 controller, relevant for Discovery) are **not installed**, while `future` is.
-I propose building with `future` now, and keeping every target
-executor-agnostic so switching to `crew` later is a change to `_targets.R`
-only. Adding `crew` is a new dependency, which is a decision for Carly (Q8),
-not something to install in passing.
+The study builds with `future` now and keeps every target executor-agnostic
+so switching to `crew` later is a change to `_targets.R` only. Adding `crew`
+would be a new dependency and a separate decision; it is not in the `renv`
+library (section 5.6).
 
 ### 5.3 Where intermediate results live
 
@@ -448,9 +505,9 @@ not something to install in passing.
   results on shared storage plus a checksum in the manifest. The simulation
   stack avoids `qs` and `arrow` (not installed) for the same dependency
   reason.
-- `simulations/.gitignore` (inside `simulations/`, the only place I am
-  authorized to write) ignores `_targets/` and exploratory scratch.
-  `.Rbuildignore` already excludes `simulations`.
+- `simulations/.gitignore` ignores `_targets/`, `renv/library/`,
+  `renv/local/`, `renv/python/`, `renv/staging/`, and `results/scratch/`.
+  `renv.lock` is committed. `.Rbuildignore` already excludes `simulations`.
 
 ### 5.4 File layout
 
@@ -458,15 +515,15 @@ not something to install in passing.
 simulations/
   PLAN.md                  this document
   README.md                how to rerun, tier by tier; written in the first execution session
-  .gitignore               _targets/, results/scratch/
+  .gitignore               _targets/, renv/ library dirs, results/scratch/
   _targets.R               pipeline definition; selects tier via an environment variable
-  DEPENDENCIES.md          simulation-only packages and versions (or renv.lock; Q8)
+  renv.lock                pinned simulation dependencies (committed); renv/ activate script
   R/
     scenarios.R            grid definitions per tier, scenario_id hashing, seed derivation
     generate.R             generative model: atoms -> bins -> normalize_coverage -> tibble
     sensitivities.R        S1 to S5 as modifiers of the baseline generator
     analyze_lmm.R          wrapper around test_decay_slopes; extracts and stores 2.4 quantities
-    analyze_bench.R        wrapper around the KW + Dunn benchmark function
+    analyze_bench.R        three benchmark arms (A2-2)
     analyze_secondary.R    wrapper around test_decay_significance (Tier 4)
     run_batch.R            replicate loop, error capture, timing
     summarize.R            rates, MC SE and CIs, paired differences, p-value ECDF
@@ -490,12 +547,10 @@ simulations/
   figures/                 final and supplementary figures
 ```
 
-`tests/` is a small addition to the layout you specified. The generator needs
-its own checks (see 6), and keeping them under `simulations/tests/` keeps them
-out of the package suite, honoring the rule that package tests verify what the
-package claims and the simulations verify that the claims are reasonable. They
-run with `testthat::test_dir()`, not `devtools::test()`. A stylistic call;
-say if you would rather they live in `scripts/`.
+`tests/` (approved) holds the generator's own checks (see 6), kept out of the
+package suite so package tests verify what the package claims and the
+simulations verify that the claims are reasonable. They run with
+`testthat::test_dir("simulations/tests")`, not `devtools::test()`.
 
 ### 5.5 Main driver
 
@@ -505,6 +560,14 @@ declares the pipeline in 5.1. `scripts/run_local.R` sets
 `future::plan(multisession)`, pins BLAS threads, and calls `tar_make_future()`.
 Re-running a tier after a partial failure resumes from the cache; raising `R`
 for a scenario adds batches without recomputing existing ones.
+
+### 5.6 Dependency pinning (`renv`)
+
+Simulation-only dependencies are pinned by `simulations/renv.lock` (Q8), with
+`renv` initialized scoped to `simulations/` (`renv::init(bare = TRUE)` run
+from that directory), so the simulation library is separate from the package
+and system libraries. The `.gitignore` in 5.3 keeps the library out of git and
+the lockfile in.
 
 ---
 
@@ -539,7 +602,7 @@ These are checks on the instrument, kept separate from the claims.
 | Per-replicate raw | `results/raw/<tier>-<family>.rds` | final tiers only |
 | Fitted power surface (C5) | `results/surface/power-surface-v1.rds` plus `power-surface-v1-grid.csv` (predictions on a regular grid) and `power-surface-v1-card.md` (domain of validity, held-out error, fit method, inputs the calculator needs) | versioned by suffix; a refit increments the version |
 | Figures | `figures/fig-typeI-by-n.pdf`, `fig-typeI-pvalue-ecdf.pdf`, `fig-power-curves.pdf`, `fig-bench-power.pdf`, `fig-sens-*.pdf`, `fig-surface.pdf`; supplement as `figS-*.pdf` | PDF plus PNG; Okabe-Ito categorical, viridis continuous, no red-green |
-| Pipeline | `simulations/_targets.R`, `R/`, `scripts/`, `DEPENDENCIES.md` or `renv.lock` | the reviewer-rerunnable artifact |
+| Pipeline | `simulations/_targets.R`, `R/`, `scripts/`, `renv.lock` | the reviewer-rerunnable artifact |
 | Provenance | `results/MANIFEST.csv`, `results/sessionInfo.txt` | |
 
 Figure numbers in file names are descriptive (`typeI-by-n`), not paper
@@ -567,10 +630,10 @@ Mirroring the session structure in the package `PLAN.md`. Each ends with a
 session log; none commits.
 
 1. **A2-1: generator, validation, pilot.** `generate.R`, `scenarios.R`,
-   `check_generator.R`, `pilot_timing.R`, Tier 0. Output: measured time per
-   fit, singular and failure rates, a go/no-go on the M1 and M3 predictions,
-   and a revised compute table. Requires the KW + Dunn function spec (Q2) only
-   for stubbing.
+   `check_generator.R`, `analyze_lmm.R`, `pilot_timing.R`, `renv` and
+   `_targets.R` skeleton, Tier 0. Output: measured time per fit, singular and
+   failure rates, calls on M1 to M7, and a revised compute table. No arm
+   beyond the primary LMM is implemented.
 2. **A2-2: analysis arms and Tier 1.** `analyze_*.R`, `run_batch.R`, targets
    pipeline, Tier 1, collapse test (2.5), grid freeze proposal.
 3. **A2-3: Tier 2 (Type I) and sensitivities S1 to S5.**
@@ -578,78 +641,34 @@ session log; none commits.
 5. **A2-5 (conditional): Tier 4 secondary test.**
 6. **A2-6: figures, tables, manifest, README.**
 
-A2-1 should not start until Q1 (calibration data) and Q2 (benchmark spec) have
-at least provisional answers.
+Q1 to Q10 are resolved (section 9), so A2-1 is unblocked.
 
 ---
 
-## 9. Risks and open questions for Carly
+## 9. Decisions and risks
 
-**Q1. Calibration data. This one changes the numbers, not the structure.**
-Every "realistic" value above (`s_ref`, `tau`, `sigma_atom`, dropout rates and
-run lengths) is my estimate. The study is only as realistic as these. Could
-you provide, from any real HCMV runs: per-sample slope estimates from
-`fit_decay_slopes`, their spread within a group, the `lmer` residual SD, and
-what fraction of bins hit zero coverage and in what run lengths? A dozen
-samples would be enough to replace the guesses with ranges. Put summary
-statistics (not raw reads) in `simulations/data/`.
+### Resolved (Carly's review, A2-1 start)
 
-**Q2. Benchmark function specification.** The KW + Dunn arm needs a defined
-contract: (a) per-sample slopes from which estimator (I assume
-`fit_decay_slopes`, OLS of `log_norm_cov` on distance); (b) which Dunn
-adjustment (I propose Holm; Benjamini-Hochberg is the alternative); (c)
-whether Dunn is gated on KW p < 0.05 as in the old two-stage use, which
-changes the post-hoc Type I rate (I will compute both unless you say gated
-only); (d) KW via chi-square approximation (R default) or an exact
-permutation distribution. `dunn.test`, `FSA` and `rstatix` are installed, or
-Dunn's statistic can be written in a few lines, so no new dependency is
-needed.
+| Q | Decision |
+|---|---|
+| Q1 Calibration data | Superseded by scope: the study is not calibrated to HCMV. Parameters are centers of plausible ranges and the ranges are shown. No `simulations/data/` calibration inputs are required. |
+| Q2 Benchmark spec | Holm for Dunn. Compute gated (KW `p < 0.05`) and ungated. Three variants: KW-chi2 + Dunn-Holm, KW-exact + Dunn-Holm, two-stage parametric (per-sample slope, then Welch's t for `G = 2` or one-way ANOVA for `G >= 3`). The exact variant is required (M4). Implemented in A2-2. |
+| Q3 Secondary test (C6) | In scope at reduced size, Tier 4. Not implemented in A2-1. |
+| Q4 Compute | Not decided; remains parked. The Tier 0 timing decides whether `run_hpc.sh` is written. |
+| Q5 Bin size | 5 kb main grid; 1 kb paired sensitivity on the same datasets. |
+| Q6 Failure counting | Headline is unconditional (failure counted as non-rejection); conditional-on-success reported alongside; the failure rate itself is stored. |
+| Q7 Acceptance | Strict Clopper-Pearson. Type I is "controlled" in a cell if the upper end of its 95% CI at `alpha = 0.05` is at most 0.06; "liberal" if the lower end exceeds 0.05. Both recorded. |
+| Q8 Pinning | `renv` lockfile at `simulations/renv.lock`, scoped to `simulations/`. |
+| Q9 `G >= 3` pattern | One group differs from the shared reference (2.2). Not equal spacing. |
+| Q10 Alpha | 0.05 for surface fitting. P-values are stored so other alphas are free in summaries. |
 
-**Q3. Is the secondary test (C6) in scope for this study?** It is the most
-expensive claim and the code-reading in M3 suggests it has the most to find.
-Options: include at reduced size (Tier 4), defer to a second study, or drop.
-My recommendation is to include it at reduced size, because the paper will
-report the empirical p-values and a reviewer will ask.
+Approved additions: the three-arm benchmark, a random-slope-only comparator
+conditional on Tier 0 confirming M1, and `simulations/tests/`.
 
-**Q4. Compute.** Parked as instructed. The only planning consequence is that
-`run_hpc.sh` is written only if Tier 0 timing says the local Mac cannot finish
-Tiers 2 and 3 in a few overnight runs.
-
-**Q5. Main bin size.** I propose 5 kb main, 1 kb paired sensitivity (4.1). Do
-you agree, or should 1 kb (the package default) carry the main grid?
-
-**Q6. How failed fits count.** I propose reporting both unconditional (failure
-= no rejection) and conditional rates. Which is the headline number? A
-method that fails on 20% of datasets and has nominal Type I on the rest is a
-different method from one that never fails.
-
-**Q7. Acceptance criteria, fixed in advance.** I propose: Type I is
-"controlled" in a cell if the upper end of its 95% Clopper-Pearson CI at
-`alpha = 0.05` is at most 0.06, "acceptably conservative" below 0.04 only if
-power loss is shown in C2, and "liberal" if the lower end exceeds 0.05. The
-Bradley liberal criterion (0.025 to 0.075) is looser and is the common
-benchmark if you prefer it. Please choose before Tier 2.
-
-**Q8. Simulation dependencies.** Installed: `targets`, `tarchetypes`,
-`future`, `mgcv`, `ggplot2`, `viridisLite`, `dunn.test`, `FSA`, `rstatix`,
-`renv`. Not installed: `crew`, `crew.cluster`, `future.callr`, `qs`, `arrow`.
-The plan needs none of the missing ones (5.2, 5.3). The remaining question is
-how to pin simulation-only versions: `DEPENDENCIES.md` (light) or an `renv`
-lockfile in `simulations/` (reproducible, heavier). I will not install
-anything without your say-so.
-
-**Q9. Equal-spacing as the `G >= 3` baseline pattern.** Which pattern is
-closer to your experiments (e.g., control vs two treatments with only one
-treated)? It moves the headline power for `G >= 3` considerably, because the
-omnibus F has `G - 1` numerator df and dilutes a single-outlier effect.
-
-**Q10. Is `alpha = 0.05` the only level that matters for the calculator?**
-Storing p-values makes other levels free in the summaries, but the surface is
-fitted at one `alpha` per version.
-
-**Risk: the generator is the study.** If Q1 is not answerable, results are
-conditional on my parameter guesses and should be presented as "behavior over
-a plausible range" with the range shown, not as "behavior on HCMV data".
+**Risk: the generator is the study.** Results are statements about behavior
+over the stated parameter ranges, with the ranges shown, not about any one
+organism. The ranges for `tau`, `sigma_atom`, dropout rates and run lengths
+are judgment-based and are the study's main external-validity assumption.
 
 **Risk: dependency on package state.** The benchmark function does not exist
 yet. Tier 2 and 3 results for C3 cannot be produced until it does, and any
@@ -671,7 +690,7 @@ additions or decisions for you. M1 and M2 change the simulation design.
 
 **M1. The random-effects covariance is probably degenerate by construction,
 so `singular` may be `TRUE` for most fits and carry no information.
-[to verify in Tier 0]**
+[to verify in Tier 0] Post-A2-1 decision, see `NOTES.md`.**
 I think this because `normalize_coverage` divides each sample by its own
 median bin coverage, so each sample's `log_norm_cov` is about 0 at the median
 distance, whatever its depth. For a log-linear truth, the sample intercept at
