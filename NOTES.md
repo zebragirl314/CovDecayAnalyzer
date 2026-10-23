@@ -7,16 +7,23 @@ the long-form documentation.
 ## Scope
 
 CovDecayAnalyzer provides tools for analyzing coverage decay around a
-user-supplied anchor position on a linear reference genome. Primary user
+user-supplied anchor position in linear reference coordinates. The method
+is applicable to dsDNA viruses and other organisms with a localized
+replication origin, whether the physical genome is linear or circular,
+provided the reference sequence is represented linearly. Primary user
 flow: read per-base coverage from `breseq`-style files or any equivalent
 schema, bin and median-normalize per sample, fit log-linear decay slopes
 from an anchor, test for group differences with a linear mixed-effects
-model (Kenward-Roger F), and assess anchor-specificity against a
-random-anchor null distribution.
+model (Kenward-Roger F), and assess anchor-specificity against a random-
+anchor null distribution.
 
 Explicitly out of scope: reads-per-million quantification (lives in the
 automated SLURM pipeline, not this package); per-feature coverage
-differential analysis (use csaw or windowed DESeq2); circular genomes.
+differential analysis (use csaw or windowed DESeq2); coordinate wrap-
+around (a user with a circular physical genome represented in a linear
+reference can analyze their data today, but the method does not treat
+position `genome_length` as adjacent to position `1`; this limitation is
+addressed in the paper's Discussion).
 
 ## Methodological commitments
 
@@ -33,7 +40,10 @@ framing.
 The previously-used Kruskal-Wallis plus Dunn two-stage approach, described
 in the lab's older methods document, is superseded. It will be re-
 implemented in the package as a benchmark function so the simulation study
-can compare the two routes head to head.
+can compare the two routes head to head. Three variants of the benchmark
+will be implemented: KW with chi-square p-values (traditional), KW with
+exact permutation p-values (correct at small n), and a two-stage parametric
+alternative (per-sample slope then Welch/ANOVA).
 
 Carly Bobak holds editorial authority on method decisions for this package.
 
@@ -45,18 +55,23 @@ par with the test suite, not a sandbox. Outputs are committed to version
 control.
 
 Simulations serve three ends:
-1. Validate Type I error and power of the primary test under realistic
-   HCMV-like coverage structure.
-2. Benchmark LMM plus Kenward-Roger against Kruskal-Wallis plus Dunn on
-   the same simulated data.
+1. Validate Type I error and power of the primary test under a parameter
+   space spanning plausible scenarios for dsDNA viruses with localized
+   replication origins. The study is not HCMV-calibrated; HCMV is one
+   application point within the space.
+2. Benchmark LMM plus Kenward-Roger against KW plus Dunn (chi-square),
+   KW plus Dunn (exact), and a two-stage parametric alternative on the
+   same simulated data.
 3. Produce the empirical power surface that will fit the sample size
    calculator added as a new package function.
 
-Simulation-design requirements (parked from the methodological observations
-review):
+Simulation-design requirements (parked from the methodological
+observations review):
 
-- Baseline generative model: HCMV-like coverage structure with configurable
-  anchor, effect size, n per group, bin size, additive noise.
+- Baseline generative model: dsDNA viral coverage structure with
+  configurable anchor, effect size, n per group, bin size, additive
+  noise, parameterized to span biologically plausible ranges for linear-
+  reference-coordinate analysis of viral genomes.
 - Autocorrelated residuals sensitivity. The LMM assumes residual
   independence given random intercept and slope. Adjacent bins from the
   same sample have correlated residuals when the true decay is not log-
@@ -67,6 +82,21 @@ review):
   taking the log, so a zero-coverage bin produces a value near -11.5, a
   high-leverage outlier on the log scale. The simulation should test
   whether realistic dropout rates bias slope estimates.
+- Group-effect pattern for G >= 3 is "one group differs from the shared
+  reference." Equal spacing is not the default.
+
+## Open design questions (post-Tier-0)
+
+- M1: random-effects covariance degeneracy. Reading `test_decay_slopes`
+  suggests that median normalization pins each sample's intercept to its
+  slope, so the random-effects covariance may be degenerate by
+  construction and `isSingular(fit)` may fire on nearly every fit. If
+  Tier 0 confirms this prediction, the surface-isSingular decision from
+  Session 2 needs revisiting. Three resolutions on the table: suppress
+  the warning and leave `isSingular` as a programmatic field only; report
+  the random-effects correlation estimate instead of just singularity; or
+  switch the primary model to random-slope-only. All three are post-A2-1
+  decisions.
 
 ## Session summary convention
 
@@ -80,36 +110,35 @@ working-rules block.
 
 ## Punch list
 
-Package work:
-- Reclassify six exported helpers (`bin_coverage`, `load_sample_coverage`,
-  `normalize_coverage`, `read_coverage_tab` as internal;
-  `add_distance_from_anchor` and `empirical_pvalue` kept exported).
-- Raise `R/null_distribution.R` test coverage above 80% (currently 33%).
-- Bring vignettes up to date with `plot_sample`, added in commit 22f7c25.
-- Add Kruskal-Wallis plus Dunn benchmark function; name and multiplicity
-  adjustment to be fixed in the simulation-study context.
+Package work (Track A):
+- Reclassify six exported helpers (DONE Session 4).
+- Raise `R/null_distribution.R` test coverage above 80% (DONE Session 2).
+- Bring vignettes up to date with `plot_sample` (DONE Session 3).
+- Switch plot defaults to Okabe-Ito for colorblind-safe palettes
+  (DONE Session 3).
+- Add Kruskal-Wallis plus Dunn benchmark function (three variants).
+  Prototype in `simulations/` during A2-2; promote to package after
+  simulation design settles the API.
 - Add sample size calculator function, fitted from simulation output.
-- Switch plot defaults to Okabe-Ito for colorblind-safe palettes.
+- `DESCRIPTION` text corrections (stale ANOVA, KW, permutation claims;
+  stale RPM reference; `pbkrtest` Imports/Suggests question). Grouped
+  with a later release-hygiene session.
 
 Methodological fixes authorized 2026-10-22 (full detail in `PLAN.md`
-Session 2):
-- Items 1, 2 (plain bugs in `null_distribution_F`): resolved in Session 1,
-  commit 58c7e2b.
-- Item 3 (Phipson-Smyth documentation inconsistency): roxygen fix in
-  Session 2; vignette prose drafted by Claude and edited by Carly.
-- Item 4 (vignette "cannot occur by construction" claim): drafted by
-  Claude and edited by Carly.
-- Items 5, 6, 7, 9 (statistical and design decisions): code changes
-  authorized for Session 2.
-- Item 8: parked as a simulation-design requirement; see above.
-- Item 10: minor polish for a later session.
+Session 2): all applied in Sessions 1, 2.
 
-Documentation and writing:
+Simulation study (Track A2):
+- Open at A2-1 with generator, infrastructure, and Tier 0 pilot. See
+  `simulations/PLAN.md` for execution sequence.
+
+Methods paper (Track B):
 - Carly writes an updated methods document reflecting the LMM approach,
-  to supersede the older Kruskal-Wallis document on REDS.
-- Methods paper draft (Track B) with intro positioning LMM over KW,
-  methods derived from the updated document, results from simulations plus
-  eventual HCMV data.
+  to supersede the older Kruskal-Wallis document on REDS. Position the
+  method as general (dsDNA viruses with localized replication origins)
+  with HCMV as a demonstration application.
+- Methods paper draft with intro positioning LMM over KW, methods
+  derived from the updated document, results from simulations plus HCMV
+  demonstration section.
 
 Pipeline integration (Track C):
 - Optional coverage-decay module in the SLURM pipeline, wrapping the
@@ -120,10 +149,12 @@ Deferred:
 - GitHub organization move. Package currently at
   `github.com/zebragirl314/CovDecayAnalyzer` (intern's personal account);
   destination TBD (BoscoResearchGroup already referenced in `DESCRIPTION`).
-- `DESCRIPTION` text corrections (stale ANOVA, KW, permutation claims;
-  stale RPM reference; `pbkrtest` Imports/Suggests question). Needs
-  explicit `DESCRIPTION`-edit authorization. Grouped with a later release-
-  hygiene session.
+- Circular-biology-analyzed-as-linear sensitivity cell. Noted as a
+  limitation in the paper's Discussion rather than tested in the
+  simulation study; most users analyzing HCMV already do exactly this
+  and it works for them.
+- Design-question `plot_sample` fit line uses all sample bins, not only
+  in-window bins. Revisit on next editorial pass of intro vignette.
 
 ## Baseline state
 
@@ -131,3 +162,7 @@ Tagged as `baseline-pre-claude` on 2026-10-22. At that tag: R CMD check
 clean, all tests pass, 67% overall line coverage, docs regenerated with
 roxygen2 8.1.1. This tag is an immovable reference point; use
 `git diff baseline-pre-claude` to see cumulative changes from here.
+
+Current state: Track A complete (Sessions 1 through 4 committed), 158
+tests passing, R CMD check clean with zero notes, overall coverage above
+91%, Track A2 planning committed. Next: A2-1 execution.
