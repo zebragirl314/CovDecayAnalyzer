@@ -162,13 +162,15 @@ rows_to_grid <- function(scs) {
 
 ## One row per (scenario, bin size, batch) with the replicate range.
 expand_batches <- function(grid, R, batch_size = 100L) {
-    starts <- seq.int(1L, R, by = batch_size)
     out <- lapply(seq_len(nrow(grid)), function(i) {
+        ## A `reps` column in the grid overrides R for that row.
+        R_i <- if ("reps" %in% names(grid)) grid$reps[i] else R
+        starts <- seq.int(1L, R_i, by = batch_size)
         tibble::tibble(
             grid[rep(i, length(starts)), ],
             batch_id  = seq_along(starts),
             rep_start = starts,
-            rep_end   = pmin(starts + batch_size - 1L, R)
+            rep_end   = pmin(starts + batch_size - 1L, R_i)
         )
     })
     do.call(rbind, out)
@@ -288,10 +290,57 @@ explore_grid <- function() {
     grid
 }
 
+## A2-3 grid: three targeted high-R cells, validation cells for the two new
+## arm variants, and the 1 kb paired cells. `reps` is replicates per row.
+## Replicate IDs start at 1, so replicates 1 to 200 reuse the Tier 1 datasets
+## of the same scenario (same seeds); 1 kb rows share the 5 kb scenario ID.
+##   anchor_025     anchor 0.25 L, G = 2, n = 5, Delta_std 0, R = 5000
+##   one_kb         bin 1 kb, G = 2, n = 5, Delta_std {0, .5, 1, 1.5}, R = 1000
+##   slope_only     reference, G = 2, n = 5, Delta_std 0, R = 5000
+##   dunn_perm      reference, G = 3, n = 5, Delta_std {0, 1}, R = 500
+##   pooled         reference, G = 2 n {5}; G = 3 n 5 (Delta_std {0, 1}), R = 500
+##   pooled_extra   G = 2, n {2, 3}, Delta_std {0, 1}, R = 500 (added: where
+##                  Welch and pooled differ)
+## Rows that coincide (same scenario and bin) are merged, keeping the larger R
+## and joining the family labels.
+a23_grid <- function() {
+    cells <- list()
+    add <- function(family, reps, bin_size = 5000L, ...) {
+        sc <- make_scenario(..., bin_size = bin_size)
+        row <- scenario_to_row(sc)
+        row$family <- family
+        row$reps <- as.integer(reps)
+        cells[[length(cells) + 1L]] <<- row
+    }
+    add("anchor_025", 5000L, anchor_frac = 0.25, n = 5L, G = 2L, Delta_std = 0)
+    for (d in c(0, 0.5, 1, 1.5)) {
+        add("one_kb", 1000L, bin_size = 1000L, n = 5L, G = 2L, Delta_std = d)
+    }
+    add("slope_only", 5000L, n = 5L, G = 2L, Delta_std = 0)
+    for (d in c(0, 1)) add("dunn_perm", 500L, n = 5L, G = 3L, Delta_std = d)
+    for (G in 2:3) for (d in c(0, 1)) {
+        add("pooled", 500L, n = 5L, G = G, Delta_std = d)
+    }
+    for (n in c(2L, 3L)) for (d in c(0, 1)) {
+        add("pooled_extra", 500L, n = n, G = 2L, Delta_std = d)
+    }
+    grid <- do.call(rbind, cells)
+    key <- paste(grid$scenario_id, grid$bin_size)
+    out <- lapply(split(seq_len(nrow(grid)), key), function(ix) {
+        r <- grid[ix[which.max(grid$reps[ix])], ]
+        r$family <- paste(unique(grid$family[ix]), collapse = ";")
+        r$reps <- max(grid$reps[ix])
+        r
+    })
+    grid <- do.call(rbind, unname(out))
+    grid[order(grid$family, grid$n, grid$G, grid$Delta_std), ]
+}
+
 build_grid <- function(tier) {
     switch(tier,
         pilot = pilot_grid(),
         explore = explore_grid(),
+        a23 = a23_grid(),
         stop("Tier '", tier, "' is not defined; see PLAN.md 4.2.")
     )
 }

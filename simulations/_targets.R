@@ -2,7 +2,8 @@
 ## Pipeline for the simulation study (PLAN.md 5.1, 5.5). Run from
 ## simulations/.
 ##
-##   CDA_SIM_TIER     tier to build: "pilot" or "explore" (Tier 1)
+##   CDA_SIM_TIER     tier to build: "pilot", "explore" (Tier 1) or "a23" (A2-3; use a
+##                   separate store: tar_make_future(store = "_targets_a23"))
 ##   CDA_SIM_R        replicates per scenario (default 20)
 ##   CDA_SIM_BATCH    replicates per batch (default 20)
 ##   CDA_SIM_WORKERS  1 (default): targets::tar_make(), serial.
@@ -59,6 +60,13 @@ list(
     ),
     tar_target(sim_all, sim_batch),
     tar_target(timing_summary, summarize_timing(sim_all)),
+    if (tier == "a23") {
+        tar_target(
+            a23_tables,
+            write_a23_tables(sim_all, file.path("results", "explore", "a2-3")),
+            format = "file"
+        )
+    },
     if (tier == "explore") {
         tar_target(
             tier1_tables,

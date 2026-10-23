@@ -70,10 +70,12 @@ ARM_KEY <- c("arm", "test_variant")
 ## interval, and the exact McNemar p-value.
 paired_diff <- function(rej_a, rej_b) {
     N <- length(rej_a)
-    a <- sum(rej_a & rej_b)
-    b <- sum(rej_a & !rej_b)
-    c <- sum(!rej_a & rej_b)
-    d <- sum(!rej_a & !rej_b)
+    ## Numeric, not integer: the product of the four margins overflows an
+    ## integer at N around 2,000 and up.
+    a <- as.numeric(sum(rej_a & rej_b))
+    b <- as.numeric(sum(rej_a & !rej_b))
+    c <- as.numeric(sum(!rej_a & rej_b))
+    d <- as.numeric(sum(!rej_a & !rej_b))
     A <- (a + b) * (c + d) * (a + c) * (b + d)
     phi <- 0
     if (A > 0) {
@@ -366,4 +368,243 @@ write_tier1_tables <- function(sim, out_dir = "results/explore/tier1") {
     rds <- file.path(out_dir, "tier1-replicates.rds")
     saveRDS(sim, rds, compress = "xz")
     c(paths, rds)
+}
+
+## =========================================================================
+## A2-3 tables.
+## =========================================================================
+
+.bind_fill <- function(dfs) {
+    cols <- unique(unlist(lapply(dfs, names)))
+    dfs <- lapply(dfs, function(d) {
+        for (cn in setdiff(cols, names(d))) d[[cn]] <- NA
+        d[cols]
+    })
+    do.call(rbind, dfs)
+}
+
+.in_family <- function(sim, fam) {
+    vapply(strsplit(sim$family, ";", fixed = TRUE), function(x) fam %in% x,
+        logical(1L))
+}
+
+## Anchor 0.25 cell. The 200 replicates shared with Tier 1 are where the cell
+## was flagged (selected because it looked high), so the fresh replicates
+## 201 to R are reported separately as the unselected confirmation.
+a23_anchor_table <- function(sim) {
+    d <- sim[.in_family(sim, "anchor_025") & sim$bin_size == 5000L, ]
+    sub <- list(all = d, fresh_201_on = d[d$replicate_id > 200L, ],
+        tier1_1_200 = d[d$replicate_id <= 200L, ])
+    out <- lapply(names(sub), function(nm) {
+        x <- sub[[nm]]
+        x$subset <- nm
+        t <- rate_table(x, c("subset", ARM_KEY))
+        t$q7_class <- .q7_class(t$ci_lower, t$ci_upper)
+        t
+    })
+    do.call(rbind, out)
+}
+
+## 1 kb vs the Tier 1 5 kb reference cells (joined by scenario_id and
+## replicate_id). Tier 1 has replicates 1 to 200 only, so the paired
+## comparison uses those; the unpaired comparison uses all 1 kb replicates.
+## `extra_5kb` (optional): further 5 kb replicates of the same reference
+## scenarios (the A2-3 supplement, replicates 201 to 1000), appended to the
+## Tier 1 rows. Only arm/variants present in Tier 1 are compared then, so
+## every row of the table rests on the same pairs.
+a23_1kb_paired <- function(sim, tier1, extra_5kb = NULL) {
+    k1 <- sim[.in_family(sim, "one_kb") & sim$bin_size == 1000L, ]
+    t5 <- tier1[tier1$bin_size == 5000L & tier1$family == "factorial", ]
+    if (!is.null(extra_5kb)) {
+        cols <- c("scenario_id", "replicate_id", "bin_size", "arm",
+            "test_variant", "p_value", "status", "Delta_std")
+        t5 <- rbind(t5[cols], extra_5kb[extra_5kb$bin_size == 5000L, cols])
+        stopifnot(!anyDuplicated(t5[c("scenario_id", "replicate_id", "arm",
+            "test_variant")]))
+        k1 <- k1[paste(k1$arm, k1$test_variant) %in%
+            paste(tier1$arm, tier1$test_variant), ]
+    }
+    k1$.rej <- .rej(k1$p_value)
+    t5$.rej <- .rej(t5$p_value)
+    out <- list()
+    cells <- unique(k1[c("scenario_id", "Delta_std")])
+    for (i in seq_len(nrow(cells))) {
+        sid <- cells$scenario_id[i]
+        for (k in unique(paste(k1$arm[k1$scenario_id == sid],
+            k1$test_variant[k1$scenario_id == sid], sep = "\r"))) {
+            kk <- strsplit(k, "\r", fixed = TRUE)[[1L]]
+            a <- k1[k1$scenario_id == sid & k1$arm == kk[1L] &
+                k1$test_variant == kk[2L], ]
+            b <- t5[t5$scenario_id == sid & t5$arm == kk[1L] &
+                t5$test_variant == kk[2L], ]
+            if (!nrow(b)) next
+            m <- merge(a[c("replicate_id", ".rej")],
+                b[c("replicate_id", ".rej")], by = "replicate_id")
+            pd <- paired_diff(m$.rej.x, m$.rej.y)
+            un <- .newcombe_diff(sum(a$.rej), nrow(a), sum(b$.rej), nrow(b))
+            out[[length(out) + 1L]] <- tibble::tibble(
+                Delta_std = cells$Delta_std[i],
+                metric = if (cells$Delta_std[i] == 0) "typeI" else "power",
+                arm = kk[1L], test_variant = kk[2L],
+                n_1kb = nrow(a), rate_1kb = mean(a$.rej),
+                n_5kb_tier1 = nrow(b), rate_5kb_tier1 = mean(b$.rej),
+                n_pairs = pd$n_pairs,
+                rate_1kb_on_pairs = pd$rate_a, rate_5kb_on_pairs = pd$rate_b,
+                paired_diff_1kb_minus_5kb = pd$diff,
+                paired_ci_lower = pd$ci_lower, paired_ci_upper = pd$ci_upper,
+                discordant_1kb_only = pd$a_only,
+                discordant_5kb_only = pd$b_only, mcnemar_p = pd$mcnemar_p,
+                unpaired_diff_all = un[["diff"]],
+                unpaired_ci_lower = un[["lower"]],
+                unpaired_ci_upper = un[["upper"]],
+                failure_rate_1kb = mean(a$status != "ok"))
+        }
+    }
+    do.call(rbind, out)
+}
+
+## All arms at the single slope-only reference cell (G = 2, n = 5, Delta_std 0).
+a23_slope_only_table <- function(sim) {
+    d <- sim[.in_family(sim, "slope_only") & sim$bin_size == 5000L, ]
+    t <- rate_table(d, ARM_KEY)
+    t$q7_class <- .q7_class(t$ci_lower, t$ci_upper)
+    t
+}
+
+## Pooled-variance vs Welch two-stage, and pooled vs the primary LMM, paired
+## on the same datasets in every validation cell.
+a23_pooled_vs_welch <- function(sim) {
+    d <- sim[(.in_family(sim, "pooled") | .in_family(sim, "pooled_extra")) &
+        sim$bin_size == 5000L & sim$test_variant == "omnibus", ]
+    d$.rej <- .rej(d$p_value)
+    out <- list()
+    for (sid in unique(d$scenario_id)) {
+        x <- d[d$scenario_id == sid, ]
+        p <- x[x$arm == "two_stage_pooled", ]
+        for (cmp in c("two_stage", "lmm")) {
+            o <- x[x$arm == cmp, ]
+            m <- merge(p[c("replicate_id", ".rej", "p_value")],
+                o[c("replicate_id", ".rej", "p_value")], by = "replicate_id")
+            pd <- paired_diff(m$.rej.x, m$.rej.y)
+            out[[length(out) + 1L]] <- cbind(
+                tibble::tibble(G = p$G[1L], n = p$n[1L],
+                    Delta_std = p$Delta_std[1L],
+                    metric = if (p$Delta_std[1L] == 0) "typeI" else "power",
+                    comparator = cmp,
+                    n_identical_p = sum(abs(m$p_value.x - m$p_value.y) < 1e-8),
+                    max_abs_p_diff = max(abs(m$p_value.x - m$p_value.y))),
+                pd)
+        }
+    }
+    names(out) <- NULL
+    t <- do.call(rbind, out)
+    names(t)[names(t) == "a_only"] <- "pooled_only_rejects"
+    names(t)[names(t) == "b_only"] <- "comparator_only_rejects"
+    names(t)[names(t) == "rate_a"] <- "rate_pooled"
+    names(t)[names(t) == "rate_b"] <- "rate_comparator"
+    t[order(t$comparator, t$G, t$n, t$Delta_std), ]
+}
+
+## Permutation-Dunn validation at G = 3, n = 5 (Delta_std 0 and 1): finite
+## p-values, method counts, rejection rates, and agreement with the
+## normal-approximation Dunn rows on the same datasets.
+a23_dunn_perm_validation <- function(sim) {
+    d <- sim[.in_family(sim, "dunn_perm") & sim$bin_size == 5000L &
+        sim$arm %in% c("kw_chisq", "kw_perm"), ]
+    d$.rej <- .rej(d$p_value)
+    rates <- list()
+    for (sid in unique(d$scenario_id)) {
+        for (k in unique(paste(d$arm[d$scenario_id == sid],
+            d$test_variant[d$scenario_id == sid], sep = "\r"))) {
+            kk <- strsplit(k, "\r", fixed = TRUE)[[1L]]
+            x <- d[d$scenario_id == sid & d$arm == kk[1L] &
+                d$test_variant == kk[2L], ]
+            ci <- cp_interval(sum(x$.rej), nrow(x))
+            rates[[length(rates) + 1L]] <- tibble::tibble(
+                row_type = "rate", G = x$G[1L], n = x$n[1L],
+                Delta_std = x$Delta_std[1L], arm = kk[1L],
+                test_variant = kk[2L], n_rows = nrow(x),
+                n_nonfinite_p = sum(!is.finite(x$p_value)),
+                n_reject = sum(x$.rej), rate = mean(x$.rej),
+                ci_lower = ci[["lower"]], ci_upper = ci[["upper"]],
+                n_method_exact_enum = sum(x$dunn_perm_method == "exact_enum",
+                    na.rm = TRUE),
+                n_method_random_perm = sum(x$dunn_perm_method == "random_perm",
+                    na.rm = TRUE))
+        }
+    }
+    pairs <- list()
+    pk <- d[d$arm == "kw_perm", ]
+    for (sid in unique(pk$scenario_id)) {
+        x <- pk[pk$scenario_id == sid, ]
+        for (cmp in list(c("dunn_perm_ungated", "dunn_ungated"),
+            c("dunn_perm_gated", "dunn_gated"))) {
+            a <- x[x$test_variant == cmp[1L], ]
+            b <- x[x$test_variant == cmp[2L], ]
+            m <- merge(a[c("replicate_id", ".rej")],
+                b[c("replicate_id", ".rej")], by = "replicate_id")
+            pd <- paired_diff(m$.rej.x, m$.rej.y)
+            pairs[[length(pairs) + 1L]] <- cbind(
+                tibble::tibble(row_type = "paired_perm_vs_approx",
+                    G = x$G[1L], n = x$n[1L], Delta_std = x$Delta_std[1L],
+                    arm = "kw_perm", test_variant = cmp[1L],
+                    comparator_variant = cmp[2L]), pd)
+        }
+    }
+    .bind_fill(c(rates, pairs))
+}
+
+## Writes the A2-3 tables. The 1 kb paired table joins the supplemental 5 kb
+## replicates 201 to 1000 (`extra_5kb_path`, from scripts/a23_5kb_supplement.R)
+## to Tier 1 for the full R = 1000 pairing; a missing file is an error, not a
+## silent fall back to the R = 200 pairing.
+write_a23_tables <- function(sim, out_dir = "results/explore/a2-3",
+                             tier1_path = "results/explore/tier1/tier1-replicates.rds",
+                             extra_5kb_path = file.path(out_dir,
+                                 "a2-3-5kb-supplement-replicates.rds")) {
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+    tier1 <- readRDS(tier1_path)
+    if (!file.exists(extra_5kb_path)) {
+        stop("Supplemental 5 kb replicates not found: ", extra_5kb_path,
+            ". Run scripts/a23_5kb_supplement.R first.")
+    }
+    extra_5kb <- readRDS(extra_5kb_path)
+    tabs <- list(
+        "a2-3-anchor-025-typeI.csv" = a23_anchor_table(sim),
+        "a2-3-1kb-paired.csv" = a23_1kb_paired(sim, tier1, extra_5kb),
+        "a2-3-slope-only-high-R.csv" = a23_slope_only_table(sim),
+        "a2-3-pooled-vs-welch.csv" = a23_pooled_vs_welch(sim),
+        "a2-3-dunn-perm-validation.csv" = a23_dunn_perm_validation(sim),
+        "a2-3-failures-timing.csv" = tier1_failures_timing(sim)
+    )
+    paths <- file.path(out_dir, names(tabs))
+    for (i in seq_along(tabs)) {
+        utils::write.csv(tabs[[i]], paths[i], row.names = FALSE)
+    }
+    caption <- file.path(out_dir, "a2-3-1kb-paired-CAPTION.txt")
+    writeLines(a23_1kb_paired_caption(), caption)
+    rds <- file.path(out_dir, "a2-3-replicates.rds")
+    saveRDS(sim, rds, compress = "xz")
+    c(paths, caption, rds)
+}
+
+## Caption for a2-3-1kb-paired.csv, written beside it (a CSV cannot carry
+## comment lines without breaking read.csv).
+a23_1kb_paired_caption <- function() {
+    c("a2-3-1kb-paired.csv: 1 kb vs 5 kb bins, paired on the same datasets.",
+        "",
+        "Cells: G = 2, n = 5, reference nuisance, Delta_std 0 (Type I), 0.5, 1, 1.5 (power).",
+        "Pairing: 1 kb replicates 1 to 1000 joined by scenario_id and replicate_id to",
+        "5 kb replicates 1 to 200 (Tier 1) plus 201 to 1000 (A2-3 supplement,",
+        "scripts/a23_5kb_supplement.R). n_pairs = 1000 in every row.",
+        "Columns: paired_diff = 1 kb minus 5 kb rejection rate; paired_ci_* = Newcombe",
+        "paired-difference 95% interval; mcnemar_p = exact McNemar test; unpaired_*",
+        "compare the two marginal rates.",
+        "",
+        "Arm variants included (the nine present in Tier 1): lmm; lmm_slope_only_CAUTIONARY;",
+        "kw_chisq (omnibus, dunn_ungated, dunn_gated); kw_perm (omnibus, dunn_ungated,",
+        "dunn_gated); two_stage (omnibus).",
+        "Deferred to Tier 2: two_stage_pooled and kw_perm dunn_perm_ungated/dunn_perm_gated.",
+        "They exist only at 5 kb replicates 201 to 1000 (Tier 1 predates them), so pairing",
+        "them would rest on 800, not 1000, pairs and would not match the rows above.")
 }

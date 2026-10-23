@@ -847,3 +847,29 @@ Details and numbers are in `session-logs/session-2026-10-23-a2-2.md` and
 - **Open before Tier 2:** a pooled-variance two-stage arm (the LMM and the
   classical-ANOVA two-stage arm gave identical p-values for every balanced
   G >= 3 cell), the 1 kb scope decision, and the arm freeze commit.
+
+---
+
+## 12. A2-3 outcomes (2026-10-23)
+
+Numbers and caveats are in `session-logs/session-2026-10-23-a2-3.md` and
+`results/explore/a2-3/`.
+
+- **Arms.** Six arms per dataset now: `two_stage_pooled` is added (pooled-variance
+  t at G = 2; identical to `two_stage` at G >= 3, which was already the classical
+  ANOVA). `kw_perm` also returns `dunn_perm_ungated` and `dunn_perm_gated`
+  (permutation Dunn over the same permutations as the omnibus, method stored in
+  `dunn_perm_method`). Existing `dunn_ungated`/`dunn_gated` names are unchanged.
+- **Anchor 0.25 (M3 for that cell):** the A2-2 value of 0.105 at R = 200 was
+  noise; R = 5000 gives 0.050. Anchor-dependence of Type I is not supported at
+  G = 2, n = 5. M3 can be dropped to one confirmatory anchor sweep in Tier 2.
+- **1 kb vs 5 kb:** no bin-size calibration issue seen; 1 kb stays restricted to
+  the reference cells (median LMM fit 7.7 s vs 0.26 s).
+- **C3 framing:** the LMM and a pooled-variance two-stage give the same
+  rejection decisions under balance (see the log). The "mixed model beats
+  two-stage" comparison is only informative in the unbalanced and
+  heteroscedastic families (4.1 balance sensitivity, S3), which should be in
+  Tier 2.
+- **Q7 for KW:** the exact null rejection rate of chi-square KW at G = 2, n = 5
+  is 0.0556, so Clopper-Pearson "liberal" labels on KW chi-square cells reflect
+  discreteness of the test, not a simulation fault.

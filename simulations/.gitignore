@@ -4,3 +4,4 @@ renv/local/
 renv/python/
 renv/staging/
 results/scratch/
+_targets_*/

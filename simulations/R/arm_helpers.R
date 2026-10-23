@@ -52,12 +52,18 @@
     stats::p.adjust(2 * stats::pnorm(-abs(z)), method = "holm")
 }
 
-## Assemble the three KW rows: omnibus, Dunn-Holm ungated, Dunn-Holm gated.
-## For the Dunn rows `p_value` is the smallest Holm-adjusted pairwise p (the
-## family-wise rejection indicator at any alpha); the gated version is 1
-## unless the KW p-value is below 0.05. Per-pair p-values are not stored.
-.kw_rows <- function(prefix, data, kw_fun, scenario_id, replicate_id, bin_size) {
-    arms <- paste0(prefix, c("", "_dunn_ungated", "_dunn_gated"))
+## Assemble the KW rows: omnibus, Dunn-Holm ungated, Dunn-Holm gated (normal
+## approximation), and, when `kw$dunn_perm` is present, the permutation-Dunn
+## ungated and gated rows. For the Dunn rows `p_value` is the smallest
+## Holm-adjusted pairwise p (the family-wise rejection indicator at any
+## alpha); gated versions are 1 unless the KW p-value is below 0.05. Per-pair
+## p-values are not stored. `kw_perm_method` and `dunn_perm_method` record
+## whether the permutation p-values came from enumeration or random draws.
+.kw_rows <- function(prefix, data, kw_fun, scenario_id, replicate_id, bin_size,
+                     perm_dunn = FALSE) {
+    suffix <- c("", "_dunn_ungated", "_dunn_gated")
+    if (perm_dunn) suffix <- c(suffix, "_dunn_perm_ungated", "_dunn_perm_gated")
+    arms <- paste0(prefix, suffix)
     t0 <- proc.time()[["elapsed"]]
     out <- tryCatch({
         sl <- .sample_slopes(data)
@@ -66,7 +72,7 @@
         rows <- lapply(arms, .arm_row, data = data, scenario_id = scenario_id,
             replicate_id = replicate_id, bin_size = bin_size)
         G <- nlevels(sl$group)
-        for (i in 1:3) {
+        for (i in seq_along(rows)) {
             rows[[i]]$status <- "ok"
             rows[[i]]$n_samples <- nrow(sl)
             rows[[i]]$n_bins <- nrow(data)
@@ -77,12 +83,22 @@
             }
         }
         if (!is.null(kw$method)) {
-            for (i in 1:3) rows[[i]]$kw_perm_method <- kw$method
+            for (i in seq_along(rows)) {
+                rows[[i]]$kw_perm_method <- kw$method
+                rows[[i]]$dunn_perm_method <- NA_character_
+            }
         }
         rows[[1L]]$p_value <- kw$p
         rows[[1L]]$F_stat <- kw$H
         rows[[2L]]$p_value <- min(pa)
         rows[[3L]]$p_value <- if (kw$p < 0.05) min(pa) else 1
+        if (perm_dunn) {
+            pp <- min(kw$dunn_perm)
+            rows[[4L]]$p_value <- pp
+            rows[[5L]]$p_value <- if (kw$p < 0.05) pp else 1
+            rows[[4L]]$dunn_perm_method <- kw$method
+            rows[[5L]]$dunn_perm_method <- kw$method
+        }
         do.call(rbind, rows)
     }, error = function(e) {
         .failed_rows(arms, conditionMessage(e), scenario_id, replicate_id,

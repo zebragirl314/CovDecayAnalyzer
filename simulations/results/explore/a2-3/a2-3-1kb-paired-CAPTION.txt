@@ -1,0 +1,16 @@
+a2-3-1kb-paired.csv: 1 kb vs 5 kb bins, paired on the same datasets.
+
+Cells: G = 2, n = 5, reference nuisance, Delta_std 0 (Type I), 0.5, 1, 1.5 (power).
+Pairing: 1 kb replicates 1 to 1000 joined by scenario_id and replicate_id to
+5 kb replicates 1 to 200 (Tier 1) plus 201 to 1000 (A2-3 supplement,
+scripts/a23_5kb_supplement.R). n_pairs = 1000 in every row.
+Columns: paired_diff = 1 kb minus 5 kb rejection rate; paired_ci_* = Newcombe
+paired-difference 95% interval; mcnemar_p = exact McNemar test; unpaired_*
+compare the two marginal rates.
+
+Arm variants included (the nine present in Tier 1): lmm; lmm_slope_only_CAUTIONARY;
+kw_chisq (omnibus, dunn_ungated, dunn_gated); kw_perm (omnibus, dunn_ungated,
+dunn_gated); two_stage (omnibus).
+Deferred to Tier 2: two_stage_pooled and kw_perm dunn_perm_ungated/dunn_perm_gated.
+They exist only at 5 kb replicates 201 to 1000 (Tier 1 predates them), so pairing
+them would rest on 800, not 1000, pairs and would not match the rows above.
