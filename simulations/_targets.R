@@ -2,8 +2,11 @@
 ## Pipeline for the simulation study (PLAN.md 5.1, 5.5). Run from
 ## simulations/.
 ##
-##   CDA_SIM_TIER     tier to build: "pilot", "explore" (Tier 1) or "a23" (A2-3; use a
-##                   separate store: tar_make_future(store = "_targets_a23"))
+##   CDA_SIM_TIER     tier to build: "pilot", "explore" (Tier 1), "a23" (A2-3; use a
+##                   separate store: tar_make_future(store = "_targets_a23")) or
+##                   the A2-4 stages "a24typeI", "a24power", "a24sens" (one store
+##                   each, `_targets_a24typeI` etc.; tables are written by
+##                   scripts/a24_driver.R, which also runs the stage checks)
 ##   CDA_SIM_R        replicates per scenario (default 20)
 ##   CDA_SIM_BATCH    replicates per batch (default 20)
 ##   CDA_SIM_WORKERS  1 (default): targets::tar_make(), serial.
@@ -55,11 +58,16 @@ list(
     tar_target(batches, expand_batches(grid, R, batch)),
     tar_target(
         sim_batch,
-        run_batch(batches, pkg_methods),
+        if (grepl("^a24", tier)) {
+            run_batch_slim(batches, pkg_methods, arms = a24_arms_for(batches))
+        }
+        else run_batch(batches, pkg_methods),
         pattern = map(batches)
     ),
     tar_target(sim_all, sim_batch),
-    tar_target(timing_summary, summarize_timing(sim_all)),
+    if (!grepl("^a24", tier)) {
+        tar_target(timing_summary, summarize_timing(sim_all))
+    },
     if (tier == "a23") {
         tar_target(
             a23_tables,

@@ -130,7 +130,8 @@ generate_replicate <- function(scenario, replicate_id,
                                bin_size = scenario$bin_size,
                                overrides = NULL) {
     ensure_package()
-    seed <- derive_seed(scenario$scenario_id, replicate_id)
+    seed <- derive_seed(scenario$seed_id %||% scenario$scenario_id,
+        replicate_id)
     sim <- with_seed(seed, simulate_atoms(scenario, overrides))
 
     binned <- bin_atoms(sim$cov, sim$atoms, scenario$L, bin_size)

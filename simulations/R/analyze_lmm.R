@@ -18,7 +18,7 @@ MAX_GROUPS <- 4L
         p_value = NA_real_, F_stat = NA_real_, df1 = NA_real_,
         df2 = NA_real_, singular = NA, conv_code = NA_integer_,
         sigma = NA_real_, sd_slope = NA_real_, sd_intercept = NA_real_,
-        re_corr = NA_real_,
+        re_corr = NA_real_, p_equal_min = NA_real_,
         tibble::as_tibble(slopes),
         n_samples = NA_integer_, n_bins = NA_integer_,
         n_warnings = NA_integer_, wall_time = NA_real_
@@ -38,6 +38,9 @@ MAX_GROUPS <- 4L
 #'   group slopes per bp on the LMM scale, i.e. `-s`; NA beyond `G`),
 #'   `n_samples`, `n_bins`, `n_warnings`, and `wall_time` (seconds for the
 #'   `test_decay_slopes()` call, including its `emmeans` steps).
+#'   `p_equal_min` is the smallest Tukey-adjusted pairwise p-value among the
+#'   pairs of groups whose true effects are equal (NA when there is none);
+#'   it feeds the post-hoc family-wise error rate (PLAN.md C1b).
 analyze_lmm <- function(data,
                         scenario_id = attr(data, "scenario_id"),
                         replicate_id = attr(data, "replicate_id"),
@@ -81,6 +84,13 @@ analyze_lmm <- function(data,
         )
     }, error = function(e) e)
 
+    row$p_equal_min <- tryCatch({
+        pw <- res$pairwise
+        pair <- do.call(rbind, strsplit(as.character(pw$contrast), " - ",
+            fixed = TRUE))
+        mask <- .equal_pair_mask(data, pair[, 1L], pair[, 2L])
+        if (any(mask)) min(pw$p.value[mask]) else NA_real_
+    }, error = function(e) NA_real_)
     row$p_value <- res$p_value
     row$F_stat <- res$F_stat
     row$df1 <- res$df1

@@ -40,7 +40,81 @@ KW_PERM_B <- 2e4
 
 kw_perm_p <- function(slope, group, seed = NULL) {
     N <- length(slope)
-    ng <- as.integer(table(group))
+    tab <- table(group)
+    ng <- as.integer(tab)
+    rk <- rank(slope)
+    obs_sums <- as.numeric(tapply(rk, group, sum))
+    H <- .kw_stat(obs_sums, ng, N)
+    n_assign <- exp(lgamma(N + 1) - sum(lgamma(ng + 1)))
+    ## `sums`: one row per permutation, one column per group (rank sums).
+    if (n_assign <= KW_PERM_MAX) {
+        sums <- .enum_rank_sums(rk, ng)
+        method <- "exact_enum"
+    } else {
+        g <- as.integer(group)
+        ## Vectorized (A2-4 engineering fix). The permutations are drawn with
+        ## the same calls in the same order as the loop version
+        ## (`sample(g)` is `g[sample.int(N)]`), so the stream, and therefore
+        ## every p-value, is identical to `kw_perm_p_loop_internal()`; only the
+        ## per-permutation `tapply` is replaced by one label matrix and
+        ## column sums.
+        draw <- function() {
+            lab <- matrix(g[replicate(KW_PERM_B, sample.int(N))], N,
+                KW_PERM_B)
+            vapply(seq_along(ng), function(k) colSums(rk * (lab == k)),
+                numeric(KW_PERM_B))
+        }
+        sums <- if (is.null(seed)) draw() else with_seed(seed, draw())
+        method <- "random_perm"
+    }
+    tail_p <- function(stat_perm, stat_obs) {
+        k <- sum(stat_perm >= stat_obs - 1e-9)
+        if (method == "exact_enum") k / length(stat_perm)
+        else (k + 1) / (nrow(sums) + 1)
+    }
+    Hp <- if (method == "exact_enum") {
+        apply(sums, 1L, .kw_stat, ng = ng, N = N)
+    } else {
+        12 / (N * (N + 1)) * rowSums(sweep(sums^2, 2L, ng, "/")) - 3 * (N + 1)
+    }
+    p <- tail_p(Hp, H)
+    ## Permutation Dunn: the same permutations, |z| for every pair from the
+    ## rank-sum differences (pooled-rank normal-approximation SE, which is
+    ## constant across permutations for fixed group sizes), Holm adjusted.
+    G <- length(ng)
+    pr <- utils::combn(G, 2L)
+    se <- sqrt(N * (N + 1) / 12 * (1 / ng[pr[1L, ]] + 1 / ng[pr[2L, ]]))
+    rbar <- function(sm) sweep(sm, 2L, ng, "/")
+    zmat <- function(sm) {
+        rb <- rbar(sm)
+        abs(rb[, pr[1L, ], drop = FALSE] - rb[, pr[2L, ], drop = FALSE]) /
+            rep(se, each = nrow(sm))
+    }
+    zp <- zmat(sums)
+    zo <- drop(zmat(matrix(obs_sums, 1L)))
+    raw <- vapply(seq_len(ncol(pr)), function(j) tail_p(zp[, j], zo[j]),
+        numeric(1L))
+    names(raw) <- paste(names(tab)[pr[1L, ]], names(tab)[pr[2L, ]], sep = "|")
+    list(p = p, H = H, method = method,
+        dunn_perm = stats::p.adjust(raw, method = "holm"))
+}
+
+analyze_kw_perm <- function(data,
+                            scenario_id = attr(data, "scenario_id"),
+                            replicate_id = attr(data, "replicate_id"),
+                            bin_size = attr(data, "bin_size")) {
+    ensure_package()
+    seed <- derive_seed(scenario_id %||% "none", replicate_id %||% 0L)
+    kw_fun <- function(slope, group) kw_perm_p(slope, group, seed = seed)
+    .kw_rows("kw_perm", data, kw_fun, scenario_id, replicate_id, bin_size,
+        perm_dunn = TRUE)
+}
+
+## Dormant loop version of kw_perm_p() (see analyze_kw_perm_loop_internal).
+kw_perm_p_loop_internal <- function(slope, group, seed = NULL) {
+    N <- length(slope)
+    tab <- table(group)
+    ng <- as.integer(tab)
     rk <- rank(slope)
     obs_sums <- as.numeric(tapply(rk, group, sum))
     H <- .kw_stat(obs_sums, ng, N)
@@ -80,17 +154,24 @@ kw_perm_p <- function(slope, group, seed = NULL) {
     zo <- drop(zmat(matrix(obs_sums, 1L)))
     raw <- vapply(seq_len(ncol(pr)), function(j) tail_p(zp[, j], zo[j]),
         numeric(1L))
+    names(raw) <- paste(names(tab)[pr[1L, ]], names(tab)[pr[2L, ]], sep = "|")
     list(p = p, H = H, method = method,
         dunn_perm = stats::p.adjust(raw, method = "holm"))
 }
 
-analyze_kw_perm <- function(data,
+
+## Dormant: the pre-vectorization implementation, kept so the invariant test
+## (tests/testthat/test-kw-perm-invariant.R) and any reproduction of A2-2 to
+## Stage 1 results can call it. Not used by the pipeline.
+analyze_kw_perm_loop_internal <- function(data,
                             scenario_id = attr(data, "scenario_id"),
                             replicate_id = attr(data, "replicate_id"),
                             bin_size = attr(data, "bin_size")) {
     ensure_package()
     seed <- derive_seed(scenario_id %||% "none", replicate_id %||% 0L)
-    kw_fun <- function(slope, group) kw_perm_p(slope, group, seed = seed)
+    kw_fun <- function(slope, group) {
+        kw_perm_p_loop_internal(slope, group, seed = seed)
+    }
     .kw_rows("kw_perm", data, kw_fun, scenario_id, replicate_id, bin_size,
         perm_dunn = TRUE)
 }

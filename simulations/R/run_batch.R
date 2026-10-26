@@ -78,6 +78,8 @@ ARM_FUN_NAMES <- unlist(ARM_FUNS)
 #' @param batch One row of [expand_batches()]: the scenario columns plus
 #'   `rep_start` and `rep_end` (and, for Tier 1, `family`, `sweep_factor`,
 #'   `sweep_level`).
+#' @param arms Character vector of arm families to run (names of `ARM_FUNS`);
+#'   default all six. The A2-4 Sobol surface points run `"lmm"` only.
 #' @param methods_files Character vector of the package files that define
 #'   the statistics. Unused in the body; it exists so that a change to those
 #'   files invalidates the target (PLAN.md 5.1).
@@ -88,7 +90,9 @@ ARM_FUN_NAMES <- unlist(ARM_FUNS)
 #'   [analyze_lmm()]. `status` is `"ok"` or the error message of a failed arm,
 #'   whose result columns are then NA. `wall_time` on the three rows of one KW
 #'   arm is the shared time of that arm.
-run_batch <- function(batch, methods_files = NULL) {
+run_batch <- function(batch, methods_files = NULL,
+                      arms = names(ARM_FUNS)) {
+    arms <- match.arg(arms, names(ARM_FUNS), several.ok = TRUE)
     ensure_package()
     sc <- scenario_from_row(batch)
     reps <- seq.int(batch$rep_start, batch$rep_end)
@@ -100,12 +104,13 @@ run_batch <- function(batch, methods_files = NULL) {
                     "_dunn_perm_ungated", "_dunn_perm_gated")),
                 paste0("kw_chisq", c("_dunn_ungated", "_dunn_gated")),
                 "two_stage", "two_stage_pooled")
+            all_arms <- all_arms[sub("_dunn_.*$", "", all_arms) %in% arms]
             res <- .failed_rows(all_arms,
                 paste("generate:", conditionMessage(dat)), sc$scenario_id, r,
                 sc$bin_size)
             return(.compose_long(list(res)))
         }
-        .compose_long(lapply(names(ARM_FUNS), .run_arm, data = dat,
+        .compose_long(lapply(arms, .run_arm, data = dat,
             scenario_id = sc$scenario_id, replicate_id = r,
             bin_size = sc$bin_size))
     })

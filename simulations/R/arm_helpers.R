@@ -13,6 +13,22 @@
     row
 }
 
+## TRUE for each (g1[i], g2[i]) pair of groups whose true effects are equal.
+## Truth comes from the generator's `truth` attribute (`delta` per sample).
+.equal_pair_mask <- function(data, g1, g2) {
+    tr <- attr(data, "truth")
+    dg <- tapply(tr$delta, as.character(tr$group), mean)
+    abs(dg[as.character(g1)] - dg[as.character(g2)]) < 1e-12
+}
+
+## Smallest adjusted p among the truly equal pairs of a named pairwise
+## vector (names "g1|g2"); NA when no pair is truly equal.
+.min_equal_p <- function(data, padj) {
+    pair <- do.call(rbind, strsplit(names(padj), "|", fixed = TRUE))
+    mask <- .equal_pair_mask(data, pair[, 1L], pair[, 2L])
+    if (any(mask)) min(padj[mask]) else NA_real_
+}
+
 ## Per-sample OLS slopes via the package's `fit_decay_slopes()`.
 .sample_slopes <- function(data) {
     sl <- as.data.frame(CovDecayAnalyzer::fit_decay_slopes(data))
@@ -49,7 +65,9 @@
         (rbar[[g[1L]]] - rbar[[g[2L]]]) /
             sqrt(N * (N + 1) / 12 * (1 / ng[[g[1L]]] + 1 / ng[[g[2L]]]))
     })
-    stats::p.adjust(2 * stats::pnorm(-abs(z)), method = "holm")
+    p <- 2 * stats::pnorm(-abs(z))
+    names(p) <- paste(pr[1L, ], pr[2L, ], sep = "|")
+    stats::p.adjust(p, method = "holm")
 }
 
 ## Assemble the KW rows: omnibus, Dunn-Holm ungated, Dunn-Holm gated (normal
@@ -92,12 +110,20 @@
         rows[[1L]]$F_stat <- kw$H
         rows[[2L]]$p_value <- min(pa)
         rows[[3L]]$p_value <- if (kw$p < 0.05) min(pa) else 1
+        ## Smallest adjusted p among truly equal pairs (post-hoc FWER);
+        ## gated rows are 1 unless the omnibus p is below 0.05.
+        pe <- .min_equal_p(data, pa)
+        rows[[2L]]$p_equal_min <- pe
+        rows[[3L]]$p_equal_min <- if (kw$p < 0.05) pe else 1
         if (perm_dunn) {
             pp <- min(kw$dunn_perm)
             rows[[4L]]$p_value <- pp
             rows[[5L]]$p_value <- if (kw$p < 0.05) pp else 1
             rows[[4L]]$dunn_perm_method <- kw$method
             rows[[5L]]$dunn_perm_method <- kw$method
+            pep <- .min_equal_p(data, kw$dunn_perm)
+            rows[[4L]]$p_equal_min <- pep
+            rows[[5L]]$p_equal_min <- if (kw$p < 0.05) pep else 1
         }
         do.call(rbind, rows)
     }, error = function(e) {

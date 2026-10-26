@@ -37,44 +37,78 @@ interaction F-statistics. The `(k+1)/(n+1)` empirical p-value is used as a
 conservative convention; see the null-distribution vignette for the exact
 framing.
 
-The previously-used Kruskal-Wallis plus Dunn two-stage approach, described
-in the lab's older methods document, is superseded. It is reimplemented
-in the simulation study as a benchmark function in three variants: KW
-with chi-square p-values (traditional), KW with permutation p-values
-(correct at small n), and a two-stage parametric alternative (per-sample
-slope then Welch's or pooled t for G=2, one-way ANOVA for G>=3).
+The lab's older Kruskal-Wallis plus Dunn two-stage approach is superseded
+and reimplemented in the simulation study as benchmark variants: KW with
+chi-square p-values (traditional), KW with permutation p-values (correct
+at small n), two-stage Welch, and two-stage pooled-variance ANOVA.
 
 Carly Bobak holds editorial authority on method decisions for this package.
 
-## Paper's methodological argument (post-A2-3)
+## Paper's methodological argument (post-A2-4)
 
-The simulation study has shifted the paper's framing. The LMM's value is
-specifically in three areas, not in a general "beats two-stage" claim:
+The simulation study has tested the pre-simulation methodological argument
+and refuted parts of it. The paper reports the simulation findings as the
+scientific contribution rather than defending the original pivot narrative.
 
-- Unbalanced designs. Classical ANOVA on per-sample slopes assumes equal
-  n per group; the LMM accommodates imbalance by construction.
-- Heteroscedastic designs (residual variance or between-sample slope
-  variance differing across groups). The LMM can be extended to model
-  this; the two-stage framework cannot.
-- The random-anchor null test, which the two-stage framework does not
-  support.
+Honest statement of findings from Tier 2:
 
-At balanced designs with G>=3, the pooled-variance two-stage ANOVA ties
-the primary LMM on every validation cell at Tier 1. The paper reports
-this finding directly rather than overstating the LMM's advantage.
+The primary LMM is well-calibrated across the parameter space tested.
+Type I error ranges 0.043 to 0.054 across all 21 null cells of the main
+grid at R=5000, including G=2 n=2 (0.045). Post-hoc contrasts control
+FWER at or below 0.03 at partial-null cells.
 
-At G=2 with balanced designs, the LMM's small-n gain over the two-stage
-is specifically about pooled vs Welch variance (not about the mixed-model
-framework). The two-stage with pooled variance also ties the LMM at
-G=2 n>=3.
+The primary LMM and the pooled-variance two-stage ANOVA are
+indistinguishable across balanced designs. In Stage 2 the two methods
+agreed on all 63 figure-grid cells within 0.006 in paired rejection rate.
+In Stage 3 S0 (unbalanced) the largest paired difference was 0.002. The
+LMM does not have a general performance advantage over the pooled two-
+stage test in the parameter space tested.
 
-The paper's cautionary paragraph will describe the slope-only
-parameterization (random slope, no random intercept): Type I of 0.507
-(95% CI 0.493-0.521) at R=5000 reference, confirming the random
-intercept absorbs real correlation structure despite the near-degenerate
-covariance estimate. The slope-only arm also shows bin-size-dependent
-Type I inflation (+0.037 from 5 kb to 1 kb at R=1000), strengthening
-the argument.
+The LMM's small-n advantage at G=2 that was documented in Tier 1 is
+specifically against Welch's t-test, not against the pooled two-stage
+test. The pooled two-stage test ties the LMM at G=2 as well.
+
+Under dropout rates of 2 to 5 percent at 5 kb run lengths, both the LMM
+and the pooled two-stage are ultra-conservative. The LMM is more
+conservative (Type I 0.005 to 0.011 at affected cells; pooled 0.020 to
+0.043). The LMM's power loss relative to pooled is up to 0.112 at paired
+comparisons on effect cells. Neither method is calibrated under these
+conditions; the paper recommends preprocessing to address dropouts
+before applying either test.
+
+The slope-only parameterization (random slope with no random intercept)
+has Type I of 0.507 (95% CI 0.493 to 0.521) at R=5000 reference and
+shows bin-size-dependent inflation (+0.037 from 5 kb to 1 kb at R=1000).
+The near-degenerate intercept-slope covariance in the full model is
+absorbing real correlation structure that the Kenward-Roger correction
+handles correctly.
+
+The random-anchor null test (`test_decay_significance`) is a capability
+the two-stage framework does not provide and is the primary unique
+contribution of the package's statistical machinery. Simulation
+validation of this test is in `vignettes/null-distribution.Rmd` and the
+`R/null_distribution.R` test suite (coverage 99%).
+
+What the simulation study did not establish:
+
+Heteroscedastic residual variance (S3) as implemented could not
+distinguish the three methods because the imposed noise term did not
+reach the test at the reference sigma_atom. A targeted rerun at larger
+sigma_atom is proposed as a follow-up before the paper's methods section
+is finalized.
+
+Heteroscedastic between-sample slope variance (S4) inflates Type I in
+all three methods approximately equally (LMM, pooled, Welch). This is
+not a methodological differentiator but is a documented condition where
+all three methods misbehave similarly.
+
+The approximate collapse hypothesis: power depends approximately on
+`Delta/tau_eff` across s_ref levels, with deviations at the finest
+resolution (+0.054 and +0.035 at G=2 Delta_std=0.5 n in {5, 10}) matching
+the noncentral-F prediction with the explicit tau_eff that combines
+between-sample slope variance and within-sample residual noise. The
+sample size calculator indexes on `Delta/tau_eff` with that explicit
+definition, not on `Delta_std/cv`.
 
 ## Simulation study
 
@@ -84,17 +118,16 @@ par with the test suite, not a sandbox. Outputs are committed to version
 control.
 
 Simulations serve three ends:
-1. Validate Type I error and power of the primary test under a parameter
+1. Characterize the primary LMM's calibration and power under a parameter
    space spanning plausible scenarios for dsDNA viruses with localized
    replication origins. The study is not HCMV-calibrated; HCMV is one
    application point within the space.
-2. Benchmark LMM plus Kenward-Roger against three KW+Dunn variants and
+2. Compare the primary LMM against the three KW+Dunn variants and the
    two two-stage parametric variants on the same simulated data.
 3. Produce the empirical power surface that will fit the sample size
    calculator added as a new package function.
 
-Simulation-design requirements (parked from the methodological
-observations review):
+Simulation-design requirements (established across A2-1 through A2-4):
 
 - Baseline generative model: dsDNA viral coverage structure with
   configurable anchor, effect size, n per group, bin size, additive
@@ -111,10 +144,6 @@ observations review):
   atom grid, aggregates to the analysis bin size, and calls the
   package's own normalize_coverage(). Skipping normalization would
   change the random-effects structure and invalidate Type I estimates.
-- Autocorrelated residuals sensitivity (parked for Tier 2): residuals
-  correlated across adjacent bins per sample.
-- Zero-coverage dropout sensitivity (parked for Tier 2): dropouts
-  generated as runs on the atom grid.
 - Partial-matching convention for simulation code: all simulation-side
   function signatures should prevent R's partial argument matching from
   silently rewriting inputs. The A2-2 prep found `args$Delta` partial-
@@ -124,35 +153,49 @@ observations review):
   arithmetic by construction. The paired_diff() function hit this at
   A2-3 R=5000.
 
-## Simulation findings parked for the paper's Discussion
+## Simulation findings parked for the paper
 
-- Collapse hypothesis supported at Tier 1: power at matched Delta_std/cv
-  agrees across s_ref levels within Monte Carlo CI. The sample size
-  calculator can be indexed by the standardized effect alone.
-- Anchor-position Type I resolved at Tier 1 plus A2-3: no inflation at
-  interior anchors across the geometric range tested. The 0.105 Tier 1
-  reading at 0.25 L was a 200-replicate noise artifact; at R=5000 it is
-  0.0500 (0.044-0.056).
-- 1 kb vs 5 kb at reference cell at R=1000: Type I 0.051 vs 0.049,
-  paired power differences bounded within 0.009 across effect sizes.
-  No bin-size calibration issue.
-- Permutation Dunn vs normal-approximation Dunn at G=3 n=5: agree
-  within noise (0.962 vs 0.958). Dunn's chi-square approximation
-  problem is specifically an omnibus problem, not a post-hoc problem.
+Headline numbers for the paper (all at reference nuisance unless noted):
+
+- Primary LMM Type I curve: 0.043 to 0.054 across all 21 null cells of
+  the main grid at R=5000. Full curve in `tier2/typeI/tbl-typeI-main.csv`.
+- Primary LMM power at G=2, Delta_std=1, reference: 0.381 at n=2, 0.769
+  at n=3, 0.985 at n=5. 95% CP CIs in `tier2/power/tbl-power-main.csv`.
+- Smallest n for 80% power (LMM, G=2, reference): n=10 at Delta_std=0.5,
+  n=4 at 1.0, n=3 at 1.5.
+- 1 kb vs 5 kb at reference cell at R=1000: Type I 0.051 vs 0.049; paired
+  power differences bounded within 0.009 across effect sizes.
+- Anchor-position Type I at interior anchors across the geometric range
+  tested: 0.0500 (0.044 to 0.056) at 0.25 L at R=5000. No inflation.
+- Anchor at the extremes (0.0 and 1.0, single-arm geometry): soft-flag
+  Type I straddling (0.063 to 0.070) at G=3 n=3. Mild but likely real.
+- Dropout conservative behavior: Type I 0.005 to 0.011 at affected
+  cells with 2 to 5 percent dropout rate at 5 kb runs. Power loss up to
+  0.112 vs pooled two-stage at effect cells. Both methods below nominal
+  but LMM more so.
+- Permutation Dunn vs normal-approximation Dunn at G=3 n=5: agree within
+  noise (0.962 vs 0.958). Dunn's chi-square approximation problem is
+  specifically an omnibus problem, not a post-hoc problem.
 - KW permutation Type I is zero at G=2 n<=3 by construction (smallest
-  possible p-value is 0.10, which exceeds 0.05 for any n and G where
-  the enumeration has fewer than 20 distinct values).
+  possible p-value is 0.10, which exceeds 0.05 for any n and G where the
+  enumeration has fewer than 20 distinct values).
 
-## Open design questions (post-Tier 2)
+## Open design questions (post-A2-4)
 
-- M1: random-effects covariance degeneracy, resolved for now. 13%
-  singular rate with intercept-slope correlation near -1 in most fits.
-  Session 2 isSingular surface decision stands. The slope-only
-  comparator (0.507 Type I) demonstrates the intercept is doing real
-  work. No further investigation planned unless Tier 2 surfaces new
-  evidence.
-- M3: anchor at the extremes (0.0 and 1.0, single-arm geometry) not yet
-  tested at R=5000. Carry into Tier 2 as a sensitivity cell.
+- S3 heteroscedastic-residual rerun at sigma_atom in {0.3, 0.5}: the
+  current S3 cannot distinguish the methods because the noise term does
+  not reach the test. A 24-cell targeted rerun at larger sigma_atom
+  would resolve whether the LMM has a true advantage under heteroscedastic
+  residuals or ties the pooled two-stage there too. Decision pending.
+- Dropout mechanism: the LMM's residual SD rises from 0.07 to 1.0 to 1.6
+  under dropouts, the random-slope SD rises 1.5 to 3 times, and the
+  singular-fit rate rises from 0.01-0.2 to 0.55-0.84. Why pooled two-
+  stage is less affected is not yet tested. Investigation parked.
+- Sample size calculator design: the collapse hypothesis is approximate
+  under the full `Delta/tau_eff` definition; the surface fit session will
+  decide whether to fit on `Delta/tau_eff` directly (cleaner derivation)
+  or to fit on raw inputs with the collapse as a derived property
+  (easier for users).
 
 ## Session summary convention
 
@@ -172,13 +215,13 @@ Package work (Track A, substantially complete):
 - Bring vignettes up to date with `plot_sample` (DONE Session 3).
 - Switch plot defaults to Okabe-Ito for colorblind-safe palettes
   (DONE Session 3).
-- Add KW+Dunn benchmark function (three variants) to the package. The
-  simulation study prototypes all three; promote to the package after
-  Tier 2 confirms the final API. The pooled-variance two-stage is also
-  a candidate for promotion.
-- Add sample size calculator function, fitted from simulation output
-  (A2-4 or later). Collapse hypothesis supports a one-input calculator
-  indexed by standardized effect size.
+- Promote the two-stage pooled-variance ANOVA and KW+Dunn variants from
+  the simulation study to the package proper. Priority raised: the
+  pooled two-stage is now the paper's "equivalent benchmark" and users
+  should be able to call it from the package directly.
+- Add sample size calculator function, fitted from simulation output.
+  Collapse-approximate indexing on `Delta/tau_eff` with explicit noise-
+  structure definition.
 - `DESCRIPTION` text corrections (stale ANOVA, KW, permutation claims;
   stale RPM reference). Pending.
 - `pbkrtest` must move from Suggests to Imports. Confirmed required at
@@ -191,14 +234,17 @@ Package work (Track A, substantially complete):
   missed the extdata README example and it was caught at A2-1.
 
 Simulation study (Track A2):
-- A2-1 through A2-3 complete. Tier 1 exploratory and three focused
-  high-R cells committed. Next: A2-4 (Tier 2 proper).
+- A2-1 through A2-4 complete. Tier 2 production run across Type I,
+  power, and sensitivities finished. Next optional: S3 rerun at larger
+  sigma_atom; required: power surface fit for the sample size calculator.
 
 Methods paper (Track B):
-- Methods document superseding the old KW doc on REDS: write after
-  A2-3 is committed. The two-stage parity finding reshaped the paper's
-  argument; writing the methods doc now would require redoing it
-  against the pivot.
+- Methods document superseding the old KW doc on REDS: write after the
+  Tier 2 commit lands. The methodological framing is now settled: LMM
+  and pooled two-stage are equivalent across balanced and unbalanced
+  designs; the LMM contributes the random-anchor null test as a unique
+  capability; both methods are conservative under dropouts; the
+  slope-only parameterization is a cautionary comparator.
 - Methods paper draft follows the methods document.
 
 Pipeline integration (Track C):
@@ -214,10 +260,8 @@ Deferred:
   limitation in the paper's Discussion rather than tested.
 - `plot_sample` fit line currently uses all sample bins, not only in-
   window bins. Revisit on next editorial pass of intro vignette.
-- Simulation results size management: Tier 1 at 22,400 datasets was
-  3 MiB; Tier 2 at ~400,000 datasets could reach 50 MiB. Options when
-  needed: `xz` compression on per-replicate `.rds`, external storage
-  with checksums committed, or Git LFS. Revisit before Tier 2 commits.
+- Simulation results size management: Tier 2 raw outputs at xz
+  compression need measurement before Tier 2 commits.
 
 ## Baseline state
 
@@ -226,7 +270,8 @@ clean, all tests pass, 67% overall line coverage, docs regenerated with
 roxygen2 8.1.1. This tag is an immovable reference point; use
 `git diff baseline-pre-claude` to see cumulative changes from here.
 
-Current state (post-A2-3): Track A complete (Sessions 1 through 4
-committed), 158 tests passing, R CMD check clean with zero notes,
-overall coverage above 91%. Track A2 at Tier 1 exploratory plus three
-focused high-R cells complete. Next: A2-4 (Tier 2 proper).
+Current state (uncommitted, post-A2-4): Track A complete (Sessions 1
+through 4 committed), 158 tests passing, R CMD check clean with zero
+notes, overall coverage above 91%. Track A2 Tier 1, A2-3, and Tier 2
+Stages 1 through 3 complete and awaiting commit after the paper
+framing is settled. Next: optional S3 rerun, then power surface fit.

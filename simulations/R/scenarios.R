@@ -63,6 +63,14 @@ make_scenario <- function(..., bin_size = 5000L) {
     }
     sc$anchor <- sc$anchor_frac * sc$L
     sc$scenario_id <- scenario_id(sc)
+    ## Seed ID: the ID of the same scenario without sensitivity modifiers.
+    ## Sensitivity datasets share their baseline random draws with the
+    ## baseline scenario (PLAN.md 2.3), so paired deltas are possible. Equal
+    ## to `scenario_id` whenever `sens` is empty, so baseline seeds are
+    ## unchanged.
+    base <- sc
+    base$sens <- list()
+    sc$seed_id <- scenario_id(base)
     class(sc) <- c("cda_scenario", "list")
     sc
 }
@@ -131,6 +139,14 @@ scenario_from_row <- function(row) {
     row <- as.list(row)
     args <- row[intersect(names(row), c(.scenario_id_fields, "bin_size"))]
     args$atom_size <- NULL
+    ## Unbalanced designs and sensitivity modifiers travel as strings.
+    if (!is.null(row$n_spec) && !is.na(row$n_spec) && nzchar(row$n_spec)) {
+        args$n <- as.integer(strsplit(row$n_spec, ",", fixed = TRUE)[[1L]])
+    }
+    if (!is.null(row$sens_spec) && !is.na(row$sens_spec) &&
+        nzchar(row$sens_spec)) {
+        args$sens <- eval(parse(text = row$sens_spec))
+    }
     do.call(make_scenario, args)
 }
 
@@ -151,7 +167,11 @@ scenario_to_row <- function(sc) {
         depth_sd_log = sc$depth_sd_log,
         bin_size     = sc$bin_size,
         tau_eff      = tau_eff(sc),
-        delta_std    = sc$Delta / tau_eff(sc)  # Delta / tau_eff, not Delta_std
+        delta_std    = sc$Delta / tau_eff(sc),  # Delta / tau_eff, not Delta_std
+        seed_id      = sc$seed_id,
+        n_spec       = paste(sc$n, collapse = ","),  # full n (length G if unbalanced)
+        sens_spec    = if (length(sc$sens)) paste(deparse(sc$sens),
+            collapse = "") else ""
     )
 }
 
@@ -336,11 +356,190 @@ a23_grid <- function() {
     grid[order(grid$family, grid$n, grid$G, grid$Delta_std), ]
 }
 
+## ---------------------------------------------------------------------
+## A2-4 (Tier 2) grids. Each row carries `family`, `sweep_factor`,
+## `sweep_level` (labels for the summaries) and `reps`. Reference nuisance
+## everywhere unless stated: cv = 1/3, sigma_atom = 0.15, L = 238,080,
+## s_ref = 6e-6, anchor 0.5 L, 5 kb bins.
+## ---------------------------------------------------------------------
+
+.a24_row <- function(family, factor, level, reps, ..., bin_size = 5000L) {
+    sc <- make_scenario(..., bin_size = bin_size)
+    row <- scenario_to_row(sc)
+    row$family <- family
+    row$sweep_factor <- factor
+    row$sweep_level <- as.character(level)
+    row$reps <- as.integer(reps)
+    row
+}
+
+.a24_finish <- function(cells) {
+    grid <- do.call(rbind, cells)
+    stopifnot(!anyDuplicated(grid[c("scenario_id", "bin_size")]))
+    grid
+}
+
+## Stage 1: Type I. Global null over n x G (21 cells); partial nulls
+## (last group Delta_std = 1) at G in {3, 4}, n in {3, 5, 10} (6 cells).
+a24_typeI_grid <- function(R = 5000L) {
+    cells <- list()
+    for (G in 2:4) for (n in c(2L, 3L, 4L, 5L, 6L, 8L, 10L)) {
+        cells[[length(cells) + 1L]] <- .a24_row("typeI_null", "reference",
+            "reference", R, n = n, G = G, Delta_std = 0)
+    }
+    for (G in 3:4) for (n in c(3L, 5L, 10L)) {
+        cells[[length(cells) + 1L]] <- .a24_row("typeI_partial", "reference",
+            "partial_null", R, n = n, G = G, Delta_std = 1)
+    }
+    .a24_finish(cells)
+}
+
+## Surface design: `npts` Sobol points over n in 2:12, G in {2, 3, 4},
+## Delta_std in (0, 2), cv in (0.1, 0.5), sigma_atom in (0.05, 0.5), L in
+## (50 kb, 500 kb), anchor fraction in (0.1, 0.9). Continuous values are
+## rounded so scenario IDs are stable.
+a24_surface_points <- function(npts = 400L) {
+    u <- sobol_points(npts, 7L)
+    data.frame(
+        point = seq_len(npts),
+        n = 2L + as.integer(floor(u[, 1L] * 11)),
+        G = 2L + as.integer(floor(u[, 2L] * 3)),
+        Delta_std = round(u[, 3L] * 2, 4),
+        cv = round(0.1 + u[, 4L] * 0.4, 4),
+        sigma_atom = round(0.05 + u[, 5L] * 0.45, 4),
+        L = round((50000 + u[, 6L] * 450000) / 1000) * 1000,
+        anchor_frac = round(0.1 + u[, 7L] * 0.8, 4))
+}
+
+## Stage 2: power. Figure grid (63 cells, R = 1000), Sobol surface (400
+## points, R = 300), and collapse-check cells (see below).
+##
+## Collapse check (added): the Sobol design as specified does not vary s_ref,
+## so power at matched Delta_std / cv across s_ref cannot be computed from
+## it. The collapse cells run s_ref in {3e-6, 1.2e-5} at G = 2, n in {3, 5,
+## 10}, Delta_std in {0.5, 1}, cv = 1/3, R = 2000; the s_ref = 6e-6 side of
+## the comparison is the matching figure-grid cell.
+a24_power_grid <- function(R_fig = 1000L, R_surface = 300L, R_collapse = 2000L,
+                           npts = 400L) {
+    cells <- list()
+    for (G in 2:4) for (n in c(2L, 3L, 4L, 5L, 6L, 8L, 10L)) {
+        for (d in c(0.5, 1, 1.5)) {
+            cells[[length(cells) + 1L]] <- .a24_row("power_fig", "reference",
+                "reference", R_fig, n = n, G = G, Delta_std = d)
+        }
+    }
+    pts <- a24_surface_points(npts)
+    for (i in seq_len(nrow(pts))) {
+        p <- pts[i, ]
+        cells[[length(cells) + 1L]] <- .a24_row("power_surface", "sobol_point",
+            p$point, R_surface, n = p$n, G = p$G, Delta_std = p$Delta_std,
+            cv = p$cv, sigma_atom = p$sigma_atom, L = p$L,
+            anchor_frac = p$anchor_frac)
+    }
+    for (sr in c(3e-6, 1.2e-5)) for (n in c(3L, 5L, 10L)) {
+        for (d in c(0.5, 1)) {
+            cells[[length(cells) + 1L]] <- .a24_row("power_collapse", "s_ref",
+                sr, R_collapse, n = n, G = 2L, Delta_std = d, s_ref = sr)
+        }
+    }
+    .a24_finish(cells)
+}
+
+## Stage 3: sensitivities at R = 1000 (reduced from 2000 at the A2-4 scope
+## change; MC SE of a Type I rate near 0.05 is 0.0069). The reference cell is G in {2, 3},
+## n in {3, 5}, Delta_std in {0, 0.5, 1} (12 cells), run here as well so
+## that reference and sensitivity replicates share seeds and pair exactly.
+##
+## Arms: every arm EXCEPT the slope-only cautionary LMM (`a24_arms_for()`).
+## Its claims for the paper (Type I 0.507 at the reference cell, worse at 1 kb
+## than 5 kb) were established at A2-3 and Stage 1; its behavior under the
+## sensitivities is not a load-bearing claim, and dropping it saves about 18%
+## of Stage 3 compute. The arm stays available in the pipeline (`ARM_FUNS`).
+##   S0   unbalanced n, G = 2: n = (n_ref, n_treated) in 1:2 {2:4, 3:6, 5:10}
+##        and 1:3 {2:6, 3:9}, in both orders (the larger group is the
+##        reference group, or the treated group), Delta_std in {0, .5, 1}
+##   S1a  AR(1) residuals, phi in {0.3, 0.6, 0.9}
+##   S1b  curve floor f in {0.2, 0.4}
+##   S2   dropout fraction {0.5%, 2%, 5%} x mean run {1, 5} kb, uniform,
+##        all samples
+##   S3   residual SD ratio 2 (treated group noisier)
+##   S4   slope-CV ratio 2 (treated group more variable)
+##   S5   anchor at 0 and at 1 (single arm)
+a24_sens_grid <- function(R = 1000L) {
+    cells <- list()
+    ref <- expand.grid(G = 2:3, n = c(3L, 5L), d = c(0, 0.5, 1))
+    add_ref <- function(family, factor, level, ...) {
+        for (i in seq_len(nrow(ref))) {
+            args <- c(list(family, factor, level, R, n = ref$n[i],
+                G = ref$G[i], Delta_std = ref$d[i]), list(...))
+            cells[[length(cells) + 1L]] <<- do.call(.a24_row, args)
+        }
+    }
+    add_ref("sens_ref", "reference", "reference")
+    ## S0
+    designs <- list(c(2, 4), c(3, 6), c(5, 10), c(2, 6), c(3, 9))
+    for (dz in designs) for (ord in 1:2) for (d in c(0, 0.5, 1)) {
+        nv <- as.integer(if (ord == 1L) dz else rev(dz))
+        cells[[length(cells) + 1L]] <- .a24_row("sens_S0", "n_ref_treated",
+            paste(nv, collapse = ":"), R, n = nv, G = 2L, Delta_std = d)
+    }
+    for (phi in c(0.3, 0.6, 0.9)) {
+        add_ref("sens_S1a", "phi", phi, sens = list(S1a = list(phi = phi)))
+    }
+    for (f in c(0.2, 0.4)) {
+        add_ref("sens_S1b", "floor", f, sens = list(S1b = list(floor = f)))
+    }
+    for (fr in c(0.005, 0.02, 0.05)) for (rk in c(1, 5)) {
+        add_ref("sens_S2", "dropout_frac_runkb", paste(fr, rk, sep = "_"),
+            sens = list(S2 = list(frac = fr, run_kb = rk)))
+    }
+    add_ref("sens_S3", "sigma_ratio", 2, sens = list(S3 = list(sigma_ratio = 2)))
+    add_ref("sens_S4", "cv_ratio", 2, sens = list(S3 = list(cv_ratio = 2)))
+    for (a in c(0, 1)) add_ref("sens_S5", "anchor_frac", a, anchor_frac = a)
+    .a24_finish(cells)
+}
+
+## S3 follow-up (2026-10-24): the Stage 3 S3 cells (residual SD ratio 2) rerun
+## at larger sigma_atom, where the within-sample noise term of tau_eff is not
+## negligible. 12 S3 cells x sigma_atom in {0.3, 0.5} = 24 cells; everything
+## else at reference. No same-sigma baseline cells (scope as specified).
+a24_s3rerun_grid <- function(R = 1000L) {
+    cells <- list()
+    for (sa in c(0.3, 0.5)) for (G in 2:3) for (n in c(3L, 5L)) {
+        for (d in c(0, 0.5, 1)) {
+            cells[[length(cells) + 1L]] <- .a24_row("sens_S3rerun",
+                "sigma_atom", sa, R, n = n, G = G, Delta_std = d,
+                sigma_atom = sa, sens = list(S3 = list(sigma_ratio = 2)))
+        }
+    }
+    .a24_finish(cells)
+}
+
+## Controlled baseline for the S3 rerun (2026-10-24): the same 24 cells with
+## sigma_ratio = 1 (homoscedastic). With no `sens` the scenario_id equals the
+## seed_id of the rerun cells, so baseline and rerun datasets share draws.
+a24_s3baseline_grid <- function(R = 1000L) {
+    cells <- list()
+    for (sa in c(0.3, 0.5)) for (G in 2:3) for (n in c(3L, 5L)) {
+        for (d in c(0, 0.5, 1)) {
+            cells[[length(cells) + 1L]] <- .a24_row("sens_S3baseline",
+                "sigma_atom", sa, R, n = n, G = G, Delta_std = d,
+                sigma_atom = sa)
+        }
+    }
+    .a24_finish(cells)
+}
+
 build_grid <- function(tier) {
     switch(tier,
         pilot = pilot_grid(),
         explore = explore_grid(),
         a23 = a23_grid(),
+        a24typeI = a24_typeI_grid(),
+        a24power = a24_power_grid(),
+        a24sens = a24_sens_grid(),
+        a24s3rerun = a24_s3rerun_grid(),
+        a24s3baseline = a24_s3baseline_grid(),
         stop("Tier '", tier, "' is not defined; see PLAN.md 4.2.")
     )
 }
